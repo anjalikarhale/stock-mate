@@ -1,0 +1,6 @@
+{
+  "name": "StockMate",
+  "description": "StockMate — Indian Stock Market (NSE/BSE) Educational Simulator, RPG & Real-Time Classroom Competition System.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
