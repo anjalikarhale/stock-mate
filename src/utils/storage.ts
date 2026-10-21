@@ -42,6 +42,9 @@ export const DEFAULT_PLAYER_PROFILE: PlayerProfile = {
   watchlist: ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY'],
   currentMissionId: 'mission-1',
   unlockedFeatures: ['Stock Basics', 'mission-1'],
+  traderFiTokens: 100,
+  tournamentsWon: 0,
+  tournamentsPlayed: 0,
 };
 
 export function loadSavedProfile(): PlayerProfile {

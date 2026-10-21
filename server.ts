@@ -1372,7 +1372,7 @@ CRITICAL RULES:
     });
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.8-flash",
       contents: contents as any,
       config: {
         systemInstruction: { parts: [{ text: systemInstruction }] },
@@ -1382,7 +1382,7 @@ CRITICAL RULES:
     });
 
     const replyText = response.text || "Let's examine the mechanics: what happens to your capital when your position size exceeds your risk tolerance?";
-    return res.json({ reply: replyText, source: "gemini-2.5-flash" });
+    return res.json({ reply: replyText, source: "gemini-3.8-flash" });
   } catch (error: any) {
     console.error("AI Mentor error:", error);
     return res.json({
@@ -1417,7 +1417,7 @@ Provide:
 3. 2 key rules for Indian market trading discipline.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.8-flash",
       contents: prompt,
       config: {
         temperature: 0.6,
@@ -1427,7 +1427,7 @@ Provide:
 
     return res.json({
       analysis: response.text || "Good trade execution. Notice how your risk per trade stayed under 2% of total capital.",
-      source: "gemini-2.5-flash",
+      source: "gemini-3.8-flash",
     });
   } catch (error: any) {
     return res.json({

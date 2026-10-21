@@ -13,6 +13,7 @@ import { PortfolioTycoonGame } from './components/games/PortfolioTycoonGame';
 import { CandlestickCombat } from './components/games/CandlestickCombat';
 import { ChartDetective } from './components/games/ChartDetective';
 import { MarketCrashGame } from './components/games/MarketCrashGame';
+import { TraderFiArenaGame } from './components/games/TraderFiArenaGame';
 import { TradingTerminal } from './components/trading/TradingTerminal';
 import { ClassroomHub } from './components/classroom/ClassroomHub';
 import { SimpleTeacherDashboard } from './components/classroom/SimpleTeacherDashboard';
@@ -198,6 +199,9 @@ const AppContent: React.FC = () => {
         return <ChartDetective />;
       case 'market-crash':
         return <MarketCrashGame />;
+      case 'traderfi-arena':
+      case 'tournament-lobby':
+        return <TraderFiArenaGame />;
       case 'trading-terminal':
         return <TradingTerminal />;
       default:

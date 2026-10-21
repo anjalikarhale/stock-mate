@@ -11,6 +11,8 @@ export type DistrictId =
   | 'quant-lab';
 
 export type GameId =
+  | 'traderfi-arena'
+  | 'tournament-lobby'
   | 'candlestick-combat'
   | 'chart-detective'
   | 'market-crash'
@@ -238,6 +240,9 @@ export interface PlayerProfile {
   watchlist?: string[];
   currentMissionId: string;
   unlockedFeatures: string[];
+  traderFiTokens?: number;
+  tournamentsWon?: number;
+  tournamentsPlayed?: number;
 }
 
 export interface District {

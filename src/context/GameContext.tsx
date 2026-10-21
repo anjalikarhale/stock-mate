@@ -47,6 +47,9 @@ interface GameContextType {
   addXP: (amount: number, reason?: string) => void;
   addVirtualCash: (amount: number) => void;
   deductVirtualCash: (amount: number) => boolean;
+  addTraderFiTokens: (amount: number) => void;
+  spendTraderFiTokens: (amount: number) => boolean;
+  recordTournamentResult: (won: boolean, profit: number, rank: number) => void;
   executeTrade: (order: Omit<Order, 'id' | 'timestamp' | 'status'>) => boolean;
   recordMistake: (category: MistakeEntry['category'], description: string, financialLoss: number, tip: string) => void;
   completeDailyQuest: (questId: string) => void;
@@ -179,6 +182,35 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       virtualCash: prev.virtualCash - amount,
     }));
     return true;
+  };
+
+  const addTraderFiTokens = (amount: number) => {
+    soundEffects.levelUp();
+    setProfile(prev => ({
+      ...prev,
+      traderFiTokens: (prev.traderFiTokens ?? 100) + amount,
+    }));
+  };
+
+  const spendTraderFiTokens = (amount: number): boolean => {
+    if ((profile.traderFiTokens ?? 100) < amount) {
+      soundEffects.wrong();
+      return false;
+    }
+    soundEffects.cashTrade();
+    setProfile(prev => ({
+      ...prev,
+      traderFiTokens: Math.max(0, (prev.traderFiTokens ?? 100) - amount),
+    }));
+    return true;
+  };
+
+  const recordTournamentResult = (won: boolean, _profit: number, _rank: number) => {
+    setProfile(prev => ({
+      ...prev,
+      tournamentsPlayed: (prev.tournamentsPlayed ?? 0) + 1,
+      tournamentsWon: won ? (prev.tournamentsWon ?? 0) + 1 : (prev.tournamentsWon ?? 0),
+    }));
   };
 
   const executeTrade = (orderParams: Omit<Order, 'id' | 'timestamp' | 'status'>): boolean => {
@@ -636,6 +668,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         addXP,
         addVirtualCash,
         deductVirtualCash,
+        addTraderFiTokens,
+        spendTraderFiTokens,
+        recordTournamentResult,
         executeTrade,
         recordMistake,
         completeDailyQuest,
