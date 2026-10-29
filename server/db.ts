@@ -4,6 +4,7 @@ import path from 'path';
 import crypto from 'crypto';
 import {
   User,
+  UserRole,
   Classroom,
   ClassroomMember,
   ClassroomActivity,
@@ -21,6 +22,7 @@ import {
   StudentCourseProgressState,
 } from './types.ts';
 import { generate5RoundsForStock, SUPPORTED_STOCKS } from './marketService.ts';
+import { getMarketQuote } from './marketFeed.ts';
 
 const DB_FILE = path.join(process.cwd(), 'data', 'classroom_db.json');
 
@@ -63,7 +65,7 @@ export function generateSalt(): string {
 }
 
 export function hashPassword(password: string, salt: string): string {
-  return crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+  return crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
 }
 
 // Initial test seed: ONLY ONE teacher test account (no demo students)
@@ -201,7 +203,7 @@ export function initDatabase() {
           passwordHash: teacherHash,
         };
         db.users.push(teacher);
-      } else if (!teacher.passwordHash) {
+      } else if (!teacher.passwordHash || teacher.id === 'user_prof_sharma') {
         teacher.passwordSalt = generateSalt();
         teacher.passwordHash = hashPassword('teacher123', teacher.passwordSalt);
       }
@@ -397,13 +399,18 @@ export function authenticateUser(
     };
   }
 
-  // If user has a password set and password is provided, verify hash
-  if (user.passwordHash && user.passwordSalt && password) {
-    const isTeacherSeed = user.id === 'user_prof_sharma' && ['teacher123', 'teacherpassword', 'teacher', 'admin'].includes(password);
-    const computedHash = hashPassword(password, user.passwordSalt);
-    if (!isTeacherSeed && computedHash !== user.passwordHash) {
-      return { success: false, error: 'Incorrect password. Please check your credentials.' };
-    }
+  // Password is strictly mandatory: return an error if it's missing or wrong
+  if (!password || !password.trim()) {
+    return { success: false, error: 'Password is required' };
+  }
+
+  if (!user.passwordHash || !user.passwordSalt) {
+    return { success: false, error: 'Account has no password set. Please reset your password or sign up.' };
+  }
+
+  const computedHash = hashPassword(password, user.passwordSalt);
+  if (computedHash !== user.passwordHash) {
+    return { success: false, error: 'Incorrect password. Please check your credentials.' };
   }
 
   const safeUser = { ...user };
@@ -415,7 +422,7 @@ export function authenticateUser(
   return { success: true, user: safeUser, token };
 }
 
-export function createOrUpdateUser(userData: Partial<User> & { id: string; name: string; role: 'TEACHER' | 'STUDENT' }): User {
+export function createOrUpdateUser(userData: Partial<User> & { id: string; name: string; role: UserRole }): User {
   const existingIndex = db.users.findIndex(u => u.id === userData.id);
   if (existingIndex >= 0) {
     db.users[existingIndex] = { ...db.users[existingIndex], ...userData };
@@ -1081,18 +1088,41 @@ export function executeOrderOnPortfolio(
   }
 ): { success: boolean; order?: PersistentOrder; error?: string } {
   const portfolio = getStudentPortfolio(userId);
-  const stock = SUPPORTED_STOCKS.find(s => s.symbol === orderRequest.symbol);
-
-  const stockName = stock?.name || orderRequest.symbol;
-  const exchange = stock?.exchange || 'NSE';
-  const executionPrice = orderRequest.type === 'MARKET' ? (stock?.basePrice || orderRequest.price) : orderRequest.price;
-  const orderAmount = orderRequest.quantity * executionPrice;
-  const simulatedFee = Math.round(orderAmount * SIMULATED_BROKERAGE_PCT * 100) / 100;
-  const totalDeduction = orderAmount + simulatedFee;
+  const stock = SUPPORTED_STOCKS.find(s => s.symbol.toUpperCase() === orderRequest.symbol.toUpperCase());
+  const quote = getMarketQuote(orderRequest.symbol);
 
   if (orderRequest.quantity <= 0) {
     return { success: false, error: 'Order quantity must be greater than zero.' };
   }
+
+  // (1) MARKET orders always use server cache price and ignore any client-sent price;
+  // reject orders if the quote is missing or older than 5 minutes
+  let executionPrice: number;
+  if (orderRequest.type === 'MARKET') {
+    if (!quote) {
+      return {
+        success: false,
+        error: `Live market quote missing for ${orderRequest.symbol}. Cannot execute MARKET order.`,
+      };
+    }
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    if (quote.timestamp < fiveMinutesAgo || quote.status === 'STALE') {
+      return {
+        success: false,
+        error: `Quote for ${orderRequest.symbol} is older than 5 minutes or stale. Market order rejected.`,
+      };
+    }
+    // Always use the server cache price and ignore client-sent price
+    executionPrice = quote.price;
+  } else {
+    executionPrice = orderRequest.price;
+  }
+
+  const stockName = stock?.name || quote?.name || orderRequest.symbol;
+  const exchange = stock?.exchange || 'NSE';
+  const orderAmount = orderRequest.quantity * executionPrice;
+  const simulatedFee = Math.round(orderAmount * SIMULATED_BROKERAGE_PCT * 100) / 100;
+  const totalDeduction = orderAmount + simulatedFee;
 
   // Handle BUY Order
   if (orderRequest.action === 'BUY') {
@@ -1361,6 +1391,207 @@ export function saveStudentCourseProgress(
   progress.lastUpdated = new Date().toISOString();
   saveDatabase();
   return { progress, xpAwarded };
+}
+
+// --------------------------------------------------------------------------
+// Admin Authentication & Platform-Wide Progress Aggregation
+// --------------------------------------------------------------------------
+export const ADMIN_CREDENTIALS = {
+  id: 'user_admin_anjali',
+  username: 'anjalikarhale26',
+  email: 'anjalikarhale26@gmail.com',
+  password: 'AnjaliAdmin@2026',
+  name: 'Anjali Karhale (Admin)',
+};
+
+export function authenticateAdmin(
+  identifier: string,
+  password?: string
+): { success: boolean; user?: User; token?: string; error?: string } {
+  const cleanId = (identifier || '').trim().toLowerCase();
+  const isAdminId =
+    cleanId === ADMIN_CREDENTIALS.email.toLowerCase() ||
+    cleanId === ADMIN_CREDENTIALS.username.toLowerCase() ||
+    cleanId === 'anjali';
+
+  if (!isAdminId) {
+    return { success: false, error: 'Access restricted. Only the designated administrator may log in.' };
+  }
+
+  if (password !== ADMIN_CREDENTIALS.password) {
+    return { success: false, error: 'Incorrect administrator password.' };
+  }
+
+  // Ensure master admin user exists in DB with full ADMIN role
+  let admin = db.users.find(u => u.id === ADMIN_CREDENTIALS.id);
+  if (!admin) {
+    const salt = generateSalt();
+    const hash = hashPassword(ADMIN_CREDENTIALS.password, salt);
+    admin = {
+      id: ADMIN_CREDENTIALS.id,
+      name: ADMIN_CREDENTIALS.name,
+      email: ADMIN_CREDENTIALS.email,
+      role: 'ADMIN',
+      avatar: '🛡️',
+      xp: 99999,
+      level: 99,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      passwordSalt: salt,
+      passwordHash: hash,
+    };
+    db.users.push(admin);
+    saveDatabase();
+  } else {
+    admin.role = 'ADMIN';
+  }
+
+  const token = createSessionToken(admin.id);
+  const safeUser = { ...admin };
+  delete safeUser.passwordHash;
+  delete safeUser.passwordSalt;
+
+  return { success: true, user: safeUser, token };
+}
+
+export interface UserDetailedProgress {
+  id: string;
+  name: string;
+  email: string;
+  role: 'TEACHER' | 'STUDENT' | 'ADMIN';
+  avatar: string;
+  level: number;
+  xp: number;
+  createdAt: string;
+  lastActive: string;
+  completedTopicsCount: number;
+  totalTopicsCount: number;
+  courseProgressPercent: number;
+  completedTopicIds: string[];
+  module1Progress: { completed: number; total: number; percent: number };
+  module2Progress: { completed: number; total: number; percent: number };
+  module3Progress: { completed: number; total: number; percent: number };
+  topicScores: Record<string, number>;
+  virtualCash: number;
+  totalHoldingsValue: number;
+  netWorth: number;
+  totalTrades: number;
+  realizedPnL: number;
+  winRate: number;
+  positionsCount: number;
+  classrooms: { id: string; name: string; code: string }[];
+  attemptsCount: number;
+  avgAttemptScore: number;
+}
+
+export function getAllUsersProgress(): UserDetailedProgress[] {
+  // Total topic counts across the 3 modules
+  const TOTAL_TOPICS = 42;
+  const MOD1_TOTAL = 12;
+  const MOD2_TOTAL = 14;
+  const MOD3_TOTAL = 16;
+
+  // Filter out the admin user from student directory view, but keep all learners & teachers
+  const standardUsers = db.users.filter(u => u.role !== 'ADMIN');
+
+  return standardUsers.map(user => {
+    // 1. Course Progress
+    const progress = db.courseProgress?.[user.id] || {
+      userId: user.id,
+      completedLessons: [],
+      lessonScores: {},
+      awardedXpLessons: [],
+      lastUpdated: user.createdAt || new Date().toISOString(),
+    };
+
+    const completedTopicIds = progress.completedLessons || [];
+    const completedCount = completedTopicIds.length;
+
+    // Approximate breakdown by module prefix or index
+    const mod1Completed = completedTopicIds.filter(id => id.includes('topic-1-') || id.includes('m1') || id.includes('basic')).length;
+    const mod2Completed = completedTopicIds.filter(id => id.includes('topic-2-') || id.includes('m2') || id.includes('inter')).length;
+    const mod3Completed = completedTopicIds.filter(id => id.includes('topic-3-') || id.includes('m3') || id.includes('adv')).length;
+
+    // 2. Portfolio & Trading Metrics
+    const portfolio = db.portfolios?.[user.id] || {
+      userId: user.id,
+      virtualCash: 100000,
+      positions: [],
+      orders: [],
+      transactions: [],
+      journal: [],
+      watchlist: [],
+      lastUpdated: user.createdAt || new Date().toISOString(),
+    };
+
+    const totalHoldingsValue = (portfolio.positions || []).reduce((acc, pos) => {
+      return acc + (pos.quantity * (pos.currentPrice || pos.averageBuyPrice));
+    }, 0);
+
+    const netWorth = (portfolio.virtualCash || 100000) + totalHoldingsValue;
+    const totalTrades = (portfolio.transactions || []).length;
+    const realizedPnL = (portfolio.transactions || []).reduce((acc, t) => acc + (t.realizedPnL || 0), 0);
+    const winningTrades = (portfolio.transactions || []).filter(t => (t.realizedPnL || 0) > 0).length;
+    const winRate = totalTrades > 0 ? Math.round((winningTrades / totalTrades) * 100) : 0;
+
+    // 3. Classrooms
+    const enrolledMemberships = (db.members || []).filter(m => m.userId === user.id);
+    const userClassrooms = enrolledMemberships.map(m => {
+      const cls = db.classrooms.find(c => c.id === m.classroomId);
+      return {
+        id: m.classroomId,
+        name: cls?.name || 'Classroom',
+        code: cls?.code || 'N/A',
+      };
+    });
+
+    // 4. Activity Attempts
+    const userAttempts = (db.attempts || []).filter(a => a.studentId === user.id);
+    const avgScore = userAttempts.length > 0
+      ? Math.round(userAttempts.reduce((acc, a) => acc + (a.accuracyPercentage || 0), 0) / userAttempts.length)
+      : 0;
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar,
+      level: user.level || 1,
+      xp: user.xp || 0,
+      createdAt: user.createdAt || '2026-01-01T00:00:00.000Z',
+      lastActive: progress.lastUpdated || portfolio.lastUpdated || user.createdAt || new Date().toISOString(),
+      completedTopicsCount: completedCount,
+      totalTopicsCount: TOTAL_TOPICS,
+      courseProgressPercent: Math.min(100, Math.round((completedCount / TOTAL_TOPICS) * 100)),
+      completedTopicIds,
+      module1Progress: {
+        completed: Math.min(MOD1_TOTAL, mod1Completed || Math.min(completedCount, MOD1_TOTAL)),
+        total: MOD1_TOTAL,
+        percent: Math.min(100, Math.round(((mod1Completed || Math.min(completedCount, MOD1_TOTAL)) / MOD1_TOTAL) * 100)),
+      },
+      module2Progress: {
+        completed: Math.min(MOD2_TOTAL, mod2Completed || Math.max(0, Math.min(completedCount - MOD1_TOTAL, MOD2_TOTAL))),
+        total: MOD2_TOTAL,
+        percent: Math.min(100, Math.round(((mod2Completed || Math.max(0, Math.min(completedCount - MOD1_TOTAL, MOD2_TOTAL))) / MOD2_TOTAL) * 100)),
+      },
+      module3Progress: {
+        completed: Math.min(MOD3_TOTAL, mod3Completed || Math.max(0, completedCount - MOD1_TOTAL - MOD2_TOTAL)),
+        total: MOD3_TOTAL,
+        percent: Math.min(100, Math.round(((mod3Completed || Math.max(0, completedCount - MOD1_TOTAL - MOD2_TOTAL)) / MOD3_TOTAL) * 100)),
+      },
+      topicScores: progress.lessonScores || {},
+      virtualCash: Math.round(portfolio.virtualCash || 100000),
+      totalHoldingsValue: Math.round(totalHoldingsValue),
+      netWorth: Math.round(netWorth),
+      totalTrades,
+      realizedPnL: Math.round(realizedPnL * 100) / 100,
+      winRate,
+      positionsCount: (portfolio.positions || []).length,
+      classrooms: userClassrooms,
+      attemptsCount: userAttempts.length,
+      avgAttemptScore: avgScore,
+    };
+  });
 }
 
 

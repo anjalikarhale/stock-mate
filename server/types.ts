@@ -1,6 +1,6 @@
 // Server-side types for StockMate Classroom Activity System
 
-export type UserRole = 'TEACHER' | 'STUDENT';
+export type UserRole = 'TEACHER' | 'STUDENT' | 'ADMIN';
 
 export interface User {
   id: string;

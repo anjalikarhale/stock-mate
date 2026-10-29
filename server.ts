@@ -3,6 +3,7 @@ import http from "http";
 import path from "path";
 import { Server as SocketIOServer } from "socket.io";
 import dotenv from "dotenv";
+import rateLimit from "express-rate-limit";
 import { GoogleGenAI } from "@google/genai";
 import {
   initDatabase,
@@ -45,6 +46,8 @@ import {
   updateStudentWatchlist,
   getStudentCourseProgress,
   saveStudentCourseProgress,
+  authenticateAdmin,
+  getAllUsersProgress,
 } from "./server/db.ts";
 import { SUPPORTED_STOCKS, getStockInfo } from "./server/marketService.ts";
 import { calculateRoundScore, evaluateQuizAnswer } from "./server/scoringEngine.ts";
@@ -62,6 +65,10 @@ initDatabase();
 
 const app = express();
 const PORT = 3000;
+
+// Enable proxy trusting so Cloud Run reverse proxies correctly populate client IP
+app.set("trust proxy", 1);
+
 const server = http.createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
@@ -71,6 +78,31 @@ const io = new SocketIOServer(server, {
 });
 
 app.use(express.json());
+
+// --------------------------------------------------------------------------
+// Rate Limiters for Authentication and AI Endpoints
+// --------------------------------------------------------------------------
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 40, // Limit each IP to 40 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: false },
+  message: { error: "Too many authentication requests. Please try again after 15 minutes." },
+});
+
+const aiRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 60, // Limit each IP to 60 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: false },
+  message: { error: "Too many AI requests. Please slow down and try again shortly." },
+});
+
+app.use("/api/auth", authRateLimiter);
+app.use("/api/ai", aiRateLimiter);
+app.use("/api/chart-mentor", aiRateLimiter);
 
 // Lazy-initialized Gemini client helper
 let aiClient: GoogleGenAI | null = null;
@@ -248,6 +280,60 @@ app.post("/api/auth/signup", (req, res) => {
     return res.status(400).json({ error: "Role must be STUDENT or TEACHER" });
   }
 
+  // Require environment variable TEACHER_INVITE_CODE for TEACHER signup
+  if (role === "TEACHER") {
+    const requiredCode = process.env.TEACHER_INVITE_CODE;
+    if (!requiredCode) {
+      return res.status(500).json({ error: "Teacher registration is disabled: TEACHER_INVITE_CODE is not configured in environment." });
+    }
+    const providedCode = (req.body.inviteCode || req.body.teacherInviteCode || "").trim();
+    if (!providedCode || providedCode !== requiredCode.trim()) {
+      return res.status(403).json({ error: "Invalid Teacher Invite Code. Please request authorization from the administrator." });
+    }
+  }
+
+  const result = registerUser({
+    name: name.trim(),
+    email: email.trim(),
+    password,
+    role,
+    avatar: avatar || (role === "TEACHER" ? "👨‍🏫" : "👨‍🎓"),
+  });
+
+  if (!result.success) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  return res.status(201).json({ success: true, user: result.user, token: result.token });
+});
+
+// Alias for registration
+app.post("/api/auth/register", (req, res) => {
+  const { name, email, password, role, avatar } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Full name is required" });
+  }
+  if (!email || !email.trim() || !email.includes("@")) {
+    return res.status(400).json({ error: "A valid email address is required" });
+  }
+  if (!password || password.length < 6) {
+    return res.status(400).json({ error: "Password must be at least 6 characters long" });
+  }
+  if (!role || (role !== "STUDENT" && role !== "TEACHER")) {
+    return res.status(400).json({ error: "Role must be STUDENT or TEACHER" });
+  }
+
+  if (role === "TEACHER") {
+    const requiredCode = process.env.TEACHER_INVITE_CODE;
+    if (!requiredCode) {
+      return res.status(500).json({ error: "Teacher registration is disabled: TEACHER_INVITE_CODE is not configured in environment." });
+    }
+    const providedCode = (req.body.inviteCode || req.body.teacherInviteCode || "").trim();
+    if (!providedCode || providedCode !== requiredCode.trim()) {
+      return res.status(403).json({ error: "Invalid Teacher Invite Code. Please request authorization from the administrator." });
+    }
+  }
+
   const result = registerUser({
     name: name.trim(),
     email: email.trim(),
@@ -277,18 +363,15 @@ app.post("/api/auth/login", (req, res) => {
   return res.json({ success: true, user: result.user, token: result.token });
 });
 
-// Helper to authenticate user via Bearer token or query userId
+// Helper to authenticate user via Bearer token ONLY
 function getAuthenticatedUser(req: express.Request): User | null {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.substring(7).trim();
-    const user = getUserByToken(token);
-    if (user) return user;
-  }
-  const callerId = (req.query.userId as string) || (req.body?.userId as string) || (req.headers["x-user-id"] as string);
-  if (callerId) {
-    const user = getUserById(callerId);
-    if (user) return user;
+    if (token) {
+      const user = getUserByToken(token);
+      if (user) return user;
+    }
   }
   return null;
 }
@@ -312,12 +395,52 @@ app.post("/api/auth/logout", (req, res) => {
   return res.json({ success: true, message: "Logged out successfully" });
 });
 
-app.post("/api/auth/user", (req, res) => {
-  const { id, name, email, role, avatar } = req.body;
-  if (!id || !name || !role) {
-    return res.status(400).json({ error: "Missing id, name, or role" });
+// --------------------------------------------------------------------------
+// Admin Portal Authentication & Progress Tracking Endpoints
+// --------------------------------------------------------------------------
+app.post("/api/admin/login", (req, res) => {
+  const { identifier, password } = req.body;
+  if (!identifier || !password) {
+    return res.status(400).json({ error: "Administrator identifier and password are required." });
   }
-  const user = createOrUpdateUser({ id, name, email, role, avatar });
+
+  const result = authenticateAdmin(identifier.trim(), password);
+  if (!result.success) {
+    return res.status(401).json({ error: result.error || "Invalid administrator credentials." });
+  }
+
+  return res.json({ success: true, user: result.user, token: result.token });
+});
+
+app.get("/api/admin/users-progress", (req, res) => {
+  const user = getAuthenticatedUser(req);
+  // Allow if user is admin or if valid admin token exists
+  if (!user || user.role !== "ADMIN") {
+    return res.status(403).json({ error: "Access denied. Administrator privileges required." });
+  }
+
+  const learnersProgress = getAllUsersProgress();
+  return res.json({
+    success: true,
+    totalCount: learnersProgress.length,
+    users: learnersProgress,
+    generatedAt: new Date().toISOString(),
+  });
+});
+
+app.post("/api/auth/user", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+  const { name, email, avatar } = req.body;
+  const user = createOrUpdateUser({
+    id: authUser.id,
+    name: name || authUser.name,
+    email: email || authUser.email,
+    role: authUser.role,
+    avatar: avatar || authUser.avatar,
+  });
   res.json(user);
 });
 
@@ -325,26 +448,86 @@ app.post("/api/auth/user", (req, res) => {
 // Student Persistent Profile & Attempts Endpoints
 // --------------------------------------------------------------------------
 app.get("/api/students/:id/profile", (req, res) => {
-  const studentId = req.params.id;
-  const profileData = getStudentProfile(studentId);
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+  const targetId = authUser.role === "STUDENT" ? authUser.id : req.params.id;
+  const profileData = getStudentProfile(targetId);
   if (!profileData) {
-    return res.status(404).json({ error: "Student profile not found" });
+    const user = getUserById(targetId) || authUser;
+    return res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar,
+      xp: user.xp || 100,
+      level: user.level || 1,
+      createdAt: user.createdAt || new Date().toISOString(),
+      completedActivitiesCount: 0,
+      totalScore: 0,
+      averageAccuracy: 0,
+      attempts: [],
+      achievements: ['New Trader'],
+    });
+  }
+  return res.json(profileData);
+});
+
+app.get("/api/student/profile", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+  const profileData = getStudentProfile(authUser.id);
+  if (!profileData) {
+    return res.json({
+      id: authUser.id,
+      name: authUser.name,
+      email: authUser.email,
+      role: authUser.role,
+      avatar: authUser.avatar,
+      xp: authUser.xp || 100,
+      level: authUser.level || 1,
+      createdAt: authUser.createdAt || new Date().toISOString(),
+      completedActivitiesCount: 0,
+      totalScore: 0,
+      averageAccuracy: 0,
+      attempts: [],
+      achievements: ['New Trader'],
+    });
   }
   return res.json(profileData);
 });
 
 app.get("/api/students/:id/attempts", (req, res) => {
-  const studentId = req.params.id;
-  const attempts = getStudentAttempts(studentId);
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+  const targetId = authUser.role === "STUDENT" ? authUser.id : req.params.id;
+  const attempts = getStudentAttempts(targetId);
+  return res.json(attempts);
+});
+
+app.get("/api/student/attempts", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+  const attempts = getStudentAttempts(authUser.id);
   return res.json(attempts);
 });
 
 app.post("/api/activities/:id/attempts", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+
   const activityId = req.params.id;
   const {
-    studentId,
-    studentName,
-    studentEmail,
     classroomId,
     classroomName,
     activityName,
@@ -365,14 +548,11 @@ app.post("/api/activities/:id/attempts", (req, res) => {
     completionTime,
   } = req.body;
 
-  if (!studentId) {
-    return res.status(400).json({ error: "studentId is required" });
-  }
-
+  // Derive student identity strictly from the authenticated Bearer token
   const saved = saveActivityAttempt({
-    studentId,
-    studentName: studentName || "Student",
-    studentEmail,
+    studentId: authUser.id,
+    studentName: authUser.name,
+    studentEmail: authUser.email,
     classroomId: classroomId || "",
     classroomName: classroomName || "Stock Market Basics",
     activityId,
@@ -401,21 +581,27 @@ app.post("/api/activities/:id/attempts", (req, res) => {
 // Student Persistent Portfolio, Orders, Watchlist & Journal API
 // --------------------------------------------------------------------------
 app.get("/api/student/portfolio", (req, res) => {
-  const userId = (req.query.userId as string) || "";
-  if (!userId) {
-    return res.status(400).json({ error: "userId is required" });
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   }
-  const portfolio = getStudentPortfolio(userId);
+  const portfolio = getStudentPortfolio(authUser.id);
   return res.json(portfolio);
 });
 
 app.post("/api/student/orders", (req, res) => {
-  const { userId, symbol, action, type, quantity, price, triggerPrice, stopLossPrice, rationale, emotionalState } = req.body;
-  if (!userId || !symbol || !action || !quantity) {
-    return res.status(400).json({ error: "userId, symbol, action, and quantity are required" });
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   }
 
-  const result = executeOrderOnPortfolio(userId, {
+  const { symbol, action, type, quantity, price, triggerPrice, stopLossPrice, rationale, emotionalState } = req.body;
+  if (!symbol || !action || !quantity) {
+    return res.status(400).json({ error: "symbol, action, and quantity are required" });
+  }
+
+  // Derive user identity strictly from token
+  const result = executeOrderOnPortfolio(authUser.id, {
     symbol,
     action,
     type: type || "MARKET",
@@ -431,32 +617,41 @@ app.post("/api/student/orders", (req, res) => {
     return res.status(400).json({ error: result.error });
   }
 
-  const updatedPortfolio = getStudentPortfolio(userId);
+  const updatedPortfolio = getStudentPortfolio(authUser.id);
   return res.status(201).json({ success: true, order: result.order, portfolio: updatedPortfolio });
 });
 
 app.post("/api/student/orders/:orderId/cancel", (req, res) => {
-  const { userId } = req.body;
-  const { orderId } = req.params;
-  if (!userId || !orderId) {
-    return res.status(400).json({ error: "userId and orderId are required" });
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   }
 
-  const result = cancelStudentOrder(userId, orderId);
+  const { orderId } = req.params;
+  if (!orderId) {
+    return res.status(400).json({ error: "orderId is required" });
+  }
+
+  const result = cancelStudentOrder(authUser.id, orderId);
   if (!result.success) {
     return res.status(400).json({ error: result.error });
   }
 
-  const updatedPortfolio = getStudentPortfolio(userId);
+  const updatedPortfolio = getStudentPortfolio(authUser.id);
   return res.json({ success: true, portfolio: updatedPortfolio });
 });
 
 app.post("/api/student/watchlist", (req, res) => {
-  const { userId, watchlist } = req.body;
-  if (!userId || !Array.isArray(watchlist)) {
-    return res.status(400).json({ error: "userId and watchlist array are required" });
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   }
-  const updated = updateStudentWatchlist(userId, watchlist);
+
+  const { watchlist } = req.body;
+  if (!Array.isArray(watchlist)) {
+    return res.status(400).json({ error: "watchlist array is required" });
+  }
+  const updated = updateStudentWatchlist(authUser.id, watchlist);
   return res.json({ success: true, watchlist: updated });
 });
 
@@ -464,21 +659,26 @@ app.post("/api/student/watchlist", (req, res) => {
 // Student NCFM Course Progression API
 // --------------------------------------------------------------------------
 app.get("/api/student/course-progress", (req, res) => {
-  const userId = (req.query.userId as string) || "";
-  if (!userId) {
-    return res.status(400).json({ error: "userId is required" });
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   }
-  const progress = getStudentCourseProgress(userId);
+  const progress = getStudentCourseProgress(authUser.id);
   return res.json(progress);
 });
 
 app.post("/api/student/course-progress", (req, res) => {
-  const { userId, lessonId, score, earnedXp } = req.body;
-  if (!userId || !lessonId) {
-    return res.status(400).json({ error: "userId and lessonId are required" });
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+
+  const { lessonId, score, earnedXp } = req.body;
+  if (!lessonId) {
+    return res.status(400).json({ error: "lessonId is required" });
   }
   const result = saveStudentCourseProgress(
-    userId,
+    authUser.id,
     lessonId,
     Number(score) || 100,
     Number(earnedXp) || 100
@@ -579,28 +779,32 @@ You must adhere strictly to these rules:
 });
 
 app.get("/api/classrooms", (req, res) => {
-  const userId = (req.query.userId as string) || "";
-  if (!userId) {
-    return res.json(getUserClassrooms("user_prof_sharma"));
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   }
-  res.json(getUserClassrooms(userId));
+  res.json(getUserClassrooms(authUser.id));
 });
 
 app.post("/api/classrooms", (req, res) => {
-  const { name, teacherId, teacherName, department, year, batch } = req.body;
-  if (!name || !teacherId) {
-    return res.status(400).json({ error: "Name and teacherId are required" });
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   }
-
-  const teacher = getUserById(teacherId);
-  if (teacher && teacher.role !== "TEACHER") {
+  if (authUser.role !== "TEACHER" && authUser.role !== "ADMIN") {
     return res.status(403).json({ error: "Unauthorized: Only TEACHER accounts can create classrooms." });
   }
 
+  const { name, department, year, batch } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Classroom name is required" });
+  }
+
+  // Derive teacher identity strictly from token
   const classroom = createClassroom({
-    name,
-    teacherId,
-    teacherName: teacherName || teacher?.name || "Prof. Teacher",
+    name: name.trim(),
+    teacherId: authUser.id,
+    teacherName: authUser.name,
     department,
     year,
     batch,
@@ -610,24 +814,30 @@ app.post("/api/classrooms", (req, res) => {
 });
 
 app.post("/api/classrooms/join", (req, res) => {
-  const { code, user } = req.body;
-  if (!code || !user || !user.id) {
-    return res.status(400).json({ error: "Classroom code and authenticated user are required" });
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   }
 
-  const classroom = getClassroomByCode(code);
+  const { code } = req.body;
+  if (!code || !code.trim()) {
+    return res.status(400).json({ error: "Classroom code is required" });
+  }
+
+  const classroom = getClassroomByCode(code.trim().toUpperCase());
   if (!classroom) {
     return res.status(404).json({ error: "Invalid classroom code. Check the code and try again." });
   }
 
-  const result = joinClassroom(classroom.id, user);
+  // Derive user identity strictly from token, never from body
+  const result = joinClassroom(classroom.id, authUser);
   if (!result.success) {
     return res.status(400).json({ error: result.message });
   }
 
   // Notify classroom room with both event formats
   const joinPayload = {
-    user,
+    user: authUser,
     classroom: result.classroom,
     onlineUserIds: getOnlineUsersInClassroom(classroom.id),
   };
@@ -638,6 +848,10 @@ app.post("/api/classrooms/join", (req, res) => {
 });
 
 app.get("/api/classrooms/:id", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
   const classroom = getClassroomById(req.params.id);
   if (!classroom) {
     return res.status(404).json({ error: "Classroom not found" });
@@ -646,6 +860,10 @@ app.get("/api/classrooms/:id", (req, res) => {
 });
 
 app.get("/api/classrooms/:id/members", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
   const members = getClassroomMembers(req.params.id);
   const onlineIds = new Set(getOnlineUsersInClassroom(req.params.id));
   const annotated = members.map((m) => ({
@@ -656,6 +874,10 @@ app.get("/api/classrooms/:id/members", (req, res) => {
 });
 
 app.get("/api/classrooms/:id/students", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
   const members = getClassroomMembers(req.params.id);
   const onlineIds = new Set(getOnlineUsersInClassroom(req.params.id));
   const students = members
@@ -668,15 +890,31 @@ app.get("/api/classrooms/:id/students", (req, res) => {
 });
 
 app.get("/api/classrooms/:id/activities", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
   const activities = getClassroomActivities(req.params.id);
   res.json(activities);
 });
 
 app.post("/api/classrooms/:id/activities", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+  if (authUser.role !== "TEACHER" && authUser.role !== "ADMIN") {
+    return res.status(403).json({ error: "Unauthorized: Only TEACHER accounts can create activities." });
+  }
+
   const classroomId = req.params.id;
   const classroom = getClassroomById(classroomId);
   if (!classroom) {
     return res.status(404).json({ error: "Classroom not found" });
+  }
+
+  if (classroom.teacherId !== authUser.id && authUser.role !== "ADMIN") {
+    return res.status(403).json({ error: "Unauthorized: Only the assigned classroom teacher can create activities." });
   }
 
   const {
@@ -714,21 +952,21 @@ app.post("/api/classrooms/:id/activities", (req, res) => {
 // Activity Control & Real-time Progression API
 // --------------------------------------------------------------------------
 app.get("/api/activities/:id", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
   res.json(activity);
 });
 
 app.post("/api/activities/:id/join", (req, res) => {
-  const { user } = req.body;
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
 
-  if (!user || !user.id) {
-    return res.status(400).json({ error: "User required" });
-  }
-
-  const participant = getOrCreateParticipant(activity.id, activity.classroomId, user);
+  // Derive user identity strictly from token
+  const participant = getOrCreateParticipant(activity.id, activity.classroomId, authUser);
 
   // Broadcast to room
   io.to(`activity:${activity.id}`).emit("PARTICIPANT_JOINED", {
@@ -741,15 +979,14 @@ app.post("/api/activities/:id/join", (req, res) => {
 
 // START ACTIVITY (Teacher Only)
 app.post("/api/activities/:id/start", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
 
-  const callerUserId = req.body?.userId;
-  if (callerUserId) {
-    const classroom = getClassroomById(activity.classroomId);
-    if (classroom && classroom.teacherId !== callerUserId) {
-      return res.status(403).json({ error: "Unauthorized: Only the classroom teacher can start this activity" });
-    }
+  const classroom = getClassroomById(activity.classroomId);
+  if (authUser.role !== "ADMIN" && (!classroom || classroom.teacherId !== authUser.id)) {
+    return res.status(403).json({ error: "Unauthorized: Only the assigned classroom teacher can start this activity" });
   }
 
   const now = Date.now();
@@ -788,15 +1025,14 @@ app.post("/api/activities/:id/start", (req, res) => {
 
 // PAUSE ACTIVITY (Teacher Only)
 app.post("/api/activities/:id/pause", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
 
-  const callerUserId = req.body?.userId;
-  if (callerUserId) {
-    const classroom = getClassroomById(activity.classroomId);
-    if (classroom && classroom.teacherId !== callerUserId) {
-      return res.status(403).json({ error: "Unauthorized: Only the classroom teacher can pause this activity" });
-    }
+  const classroom = getClassroomById(activity.classroomId);
+  if (authUser.role !== "ADMIN" && (!classroom || classroom.teacherId !== authUser.id)) {
+    return res.status(403).json({ error: "Unauthorized: Only the assigned classroom teacher can pause this activity" });
   }
 
   const now = Date.now();
@@ -819,15 +1055,14 @@ app.post("/api/activities/:id/pause", (req, res) => {
 
 // RESUME ACTIVITY (Teacher Only)
 app.post("/api/activities/:id/resume", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
 
-  const callerUserId = req.body?.userId;
-  if (callerUserId) {
-    const classroom = getClassroomById(activity.classroomId);
-    if (classroom && classroom.teacherId !== callerUserId) {
-      return res.status(403).json({ error: "Unauthorized: Only the classroom teacher can resume this activity" });
-    }
+  const classroom = getClassroomById(activity.classroomId);
+  if (authUser.role !== "ADMIN" && (!classroom || classroom.teacherId !== authUser.id)) {
+    return res.status(403).json({ error: "Unauthorized: Only the assigned classroom teacher can resume this activity" });
   }
 
   const now = Date.now();
@@ -856,15 +1091,14 @@ app.post("/api/activities/:id/resume", (req, res) => {
 
 // ADVANCE TO NEXT ROUND (Teacher or Auto-timer)
 app.post("/api/activities/:id/next-round", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
 
-  const callerUserId = req.body?.userId;
-  if (callerUserId) {
-    const classroom = getClassroomById(activity.classroomId);
-    if (classroom && classroom.teacherId !== callerUserId) {
-      return res.status(403).json({ error: "Unauthorized: Only the classroom teacher can advance rounds" });
-    }
+  const classroom = getClassroomById(activity.classroomId);
+  if (authUser.role !== "ADMIN" && (!classroom || classroom.teacherId !== authUser.id)) {
+    return res.status(403).json({ error: "Unauthorized: Only the assigned classroom teacher can advance rounds" });
   }
 
   const nextRoundNumber = activity.currentRoundNumber + 1;
@@ -914,15 +1148,14 @@ app.post("/api/activities/:id/next-round", (req, res) => {
 
 // END ACTIVITY (Teacher Only)
 app.post("/api/activities/:id/end", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
 
-  const callerUserId = req.body?.userId;
-  if (callerUserId) {
-    const classroom = getClassroomById(activity.classroomId);
-    if (classroom && classroom.teacherId !== callerUserId) {
-      return res.status(403).json({ error: "Unauthorized: Only the classroom teacher can end this activity" });
-    }
+  const classroom = getClassroomById(activity.classroomId);
+  if (authUser.role !== "ADMIN" && (!classroom || classroom.teacherId !== authUser.id)) {
+    return res.status(403).json({ error: "Unauthorized: Only the assigned classroom teacher can end this activity" });
   }
 
   const updated = updateActivityStatus(activity.id, "COMPLETED", {
@@ -941,13 +1174,16 @@ app.post("/api/activities/:id/end", (req, res) => {
 
 // REFRESH & RECONNECT STATE RECOVERY
 app.get("/api/activities/:id/state", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
 
-  const studentId = (req.query.studentId as string) || "";
+  // Derive student ID strictly from authenticated user
+  const studentId = authUser.id;
   const rounds = getActivityRounds(activity.id);
   const currentRound = getActivityRound(activity.id, activity.currentRoundNumber);
-  const submissions = studentId ? getStudentSubmissions(activity.id, studentId) : [];
+  const submissions = getStudentSubmissions(activity.id, studentId);
   const participants = getActivityParticipants(activity.id);
   const leaderboard = getActivityLeaderboard(activity.id);
 
@@ -964,7 +1200,7 @@ app.get("/api/activities/:id/state", (req, res) => {
 });
 
 // PROCESS STUDENT DECISION SUBMISSION (Helper)
-function processRoundSubmission(req: express.Request, res: express.Response, activity: any, round: any) {
+function processRoundSubmission(req: express.Request, res: express.Response, activity: any, round: any, authUser: User) {
   const activityId = activity.id;
   const roundId = round.id;
 
@@ -972,10 +1208,12 @@ function processRoundSubmission(req: express.Request, res: express.Response, act
     return res.status(400).json({ error: "Activity is not currently active" });
   }
 
+  // Derive student identity strictly from the authenticated token
+  const studentId = authUser.id;
+  const studentName = authUser.name;
+  const studentAvatar = authUser.avatar || "👨‍🎓";
+
   const {
-    studentId,
-    studentName,
-    studentAvatar,
     decision,
     quantity,
     stopLoss,
@@ -987,8 +1225,8 @@ function processRoundSubmission(req: express.Request, res: express.Response, act
     reasoningRationale,
   } = req.body;
 
-  if (!studentId || !decision) {
-    return res.status(400).json({ error: "Student ID and decision (BUY/SELL/HOLD) are required" });
+  if (!decision) {
+    return res.status(400).json({ error: "Decision (BUY/SELL/HOLD) is required" });
   }
 
   // Prevent duplicate submission for this round
@@ -1019,8 +1257,8 @@ function processRoundSubmission(req: express.Request, res: express.Response, act
     roundId,
     roundNumber: round.roundNumber,
     studentId,
-    studentName: studentName || "Student",
-    studentAvatar: studentAvatar || "👨‍🎓",
+    studentName,
+    studentAvatar,
     decision,
     quantity: Number(quantity) || 1,
     stopLoss: Number(stopLoss) || 0,
@@ -1044,7 +1282,7 @@ function processRoundSubmission(req: express.Request, res: express.Response, act
 
   const submitPayload = {
     studentId,
-    studentName: studentName || "Student",
+    studentName,
     roundNumber: round.roundNumber,
     totalSubmissionsForRound: getAllActivitySubmissions(activityId).filter((s) => s.roundNumber === round.roundNumber).length,
     totalParticipants: participants.length,
@@ -1071,6 +1309,9 @@ function processRoundSubmission(req: express.Request, res: express.Response, act
 
 // SUBMIT STUDENT DECISION by round ID (Backend scored & recorded)
 app.post("/api/activities/:id/rounds/:roundId/submit", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
 
@@ -1078,11 +1319,14 @@ app.post("/api/activities/:id/rounds/:roundId/submit", (req, res) => {
   const round = rounds.find((r) => r.id === req.params.roundId) || getActivityRound(activity.id, activity.currentRoundNumber);
   if (!round) return res.status(404).json({ error: "Round not found" });
 
-  return processRoundSubmission(req, res, activity, round);
+  return processRoundSubmission(req, res, activity, round, authUser);
 });
 
 // SUBMIT STUDENT DECISION by activity ID (Convenience alias using currentRoundNumber)
 app.post("/api/activities/:id/submit", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
 
@@ -1090,13 +1334,16 @@ app.post("/api/activities/:id/submit", (req, res) => {
   const round = getActivityRound(activity.id, roundNum);
   if (!round) return res.status(404).json({ error: "Round not found" });
 
-  return processRoundSubmission(req, res, activity, round);
+  return processRoundSubmission(req, res, activity, round, authUser);
 });
 
 // --------------------------------------------------------------------------
 // StockMate Market Challenge Quiz API (2 Rounds, 10 Questions each, 100 pts/correct)
 // --------------------------------------------------------------------------
 app.get("/api/activities/:id/quiz/questions", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+
   const roundNum = Number(req.query.roundNumber) === 2 ? 2 : 1;
   const questions = getClientQuestionsForRound(roundNum as 1 | 2);
   res.json({
@@ -1108,6 +1355,9 @@ app.get("/api/activities/:id/quiz/questions", (req, res) => {
 });
 
 app.post("/api/activities/:id/quiz/submit", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+
   const activityId = req.params.id;
   const activity = getActivityById(activityId);
   if (!activity) {
@@ -1115,18 +1365,20 @@ app.post("/api/activities/:id/quiz/submit", (req, res) => {
   }
 
   const {
-    studentId,
-    studentName,
-    studentAvatar,
     roundNumber,
     questionNumber,
     questionId,
     selectedOption,
   } = req.body;
 
-  if (!studentId || !selectedOption || !questionId) {
-    return res.status(400).json({ error: "studentId, selectedOption, and questionId are required" });
+  if (!selectedOption || !questionId) {
+    return res.status(400).json({ error: "selectedOption and questionId are required" });
   }
+
+  // Derive student identity strictly from the authenticated Bearer token
+  const studentId = authUser.id;
+  const studentName = authUser.name;
+  const studentAvatar = authUser.avatar || "👨‍🎓";
 
   const rNum = Number(roundNumber) === 2 ? 2 : 1;
   const qNum = Number(questionNumber) || 1;
@@ -1153,8 +1405,8 @@ app.post("/api/activities/:id/quiz/submit", (req, res) => {
     questionNumber: qNum,
     questionId: questionDef.id,
     studentId,
-    studentName: studentName || "Student",
-    studentAvatar: studentAvatar || "👨‍🎓",
+    studentName,
+    studentAvatar,
     selectedOption: selectedOption as 'A' | 'B' | 'C' | 'D',
     isCorrect: evalResult.isCorrect,
     score: evalResult.score,
@@ -1171,8 +1423,8 @@ app.post("/api/activities/:id/quiz/submit", (req, res) => {
 
   const quizSubmitPayload = {
     studentId,
-    studentName: studentName || "Student",
-    studentAvatar: studentAvatar || "👨‍🎓",
+    studentName,
+    studentAvatar,
     roundNumber: rNum,
     questionNumber: qNum,
     totalAnswered: studentAnswers.length,
@@ -1203,17 +1455,20 @@ app.post("/api/activities/:id/quiz/submit", (req, res) => {
 });
 
 app.get("/api/activities/:id/quiz/student-answers", (req, res) => {
-  const activityId = req.params.id;
-  const studentId = req.query.studentId as string;
-  if (!studentId) {
-    return res.status(400).json({ error: "studentId query parameter is required" });
-  }
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
 
-  const answers = getStudentQuizAnswers(activityId, studentId);
+  const activityId = req.params.id;
+  const targetStudentId = authUser.role === "STUDENT" ? authUser.id : ((req.query.studentId as string) || authUser.id);
+
+  const answers = getStudentQuizAnswers(activityId, targetStudentId);
   res.json(answers);
 });
 
 app.get("/api/activities/:id/quiz/summary", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+
   const activityId = req.params.id;
   const activity = getActivityById(activityId);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
@@ -1276,12 +1531,18 @@ app.get("/api/activities/:id/quiz/summary", (req, res) => {
 
 // LEADERBOARD
 app.get("/api/activities/:id/leaderboard", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+
   const leaderboard = getActivityLeaderboard(req.params.id);
   res.json(leaderboard);
 });
 
 // RESULTS & DETAILED ANALYSIS
 app.get("/api/activities/:id/results", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).json({ error: "Activity not found" });
 
@@ -1317,6 +1578,9 @@ app.get("/api/activities/:id/results", (req, res) => {
 
 // CSV EXPORT FOR TEACHER
 app.get("/api/activities/:id/export", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) return res.status(401).send("Unauthorized: Valid Bearer token required");
+
   const activity = getActivityById(req.params.id);
   if (!activity) return res.status(404).send("Activity not found");
 

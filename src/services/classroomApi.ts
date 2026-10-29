@@ -55,6 +55,8 @@ export const classroomApi = {
     password?: string;
     role: 'TEACHER' | 'STUDENT';
     avatar?: string;
+    inviteCode?: string;
+    teacherInviteCode?: string;
   }): Promise<{ success: boolean; user?: ClassroomUser; token?: string; error?: string }> {
     const res = await fetch('/api/auth/signup', {
       method: 'POST',
@@ -109,19 +111,68 @@ export const classroomApi = {
   },
 
   async getStudentProfile(studentId: string): Promise<StudentProfileData> {
-    const res = await fetch(`/api/students/${encodeURIComponent(studentId)}/profile`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to load student profile');
-    return res.json();
+    const token = getAuthToken();
+    if (!token) {
+      return {
+        id: studentId,
+        name: 'Student',
+        email: '',
+        role: 'STUDENT',
+        avatar: '👨‍🎓',
+        xp: 100,
+        level: 1,
+        createdAt: new Date().toISOString(),
+        completedActivitiesCount: 0,
+        totalScore: 0,
+        averageAccuracy: 0,
+        attempts: [],
+        achievements: [],
+      };
+    }
+    try {
+      const res = await fetch(`/api/students/${encodeURIComponent(studentId)}/profile`, {
+        headers: getAuthHeaders(),
+      });
+      if (res.status === 401) {
+        setAuthToken(null);
+      }
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      // ignore network errors
+    }
+    return {
+      id: studentId,
+      name: 'Student',
+      email: '',
+      role: 'STUDENT',
+      avatar: '👨‍🎓',
+      xp: 100,
+      level: 1,
+      createdAt: new Date().toISOString(),
+      completedActivitiesCount: 0,
+      totalScore: 0,
+      averageAccuracy: 0,
+      attempts: [],
+      achievements: [],
+    };
   },
 
   async getStudentAttempts(studentId: string): Promise<ActivityAttempt[]> {
-    const res = await fetch(`/api/students/${encodeURIComponent(studentId)}/attempts`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to load student activity attempts');
-    return res.json();
+    const token = getAuthToken();
+    if (!token) return [];
+    try {
+      const res = await fetch(`/api/students/${encodeURIComponent(studentId)}/attempts`, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      // ignore network errors
+    }
+    return [];
   },
 
   async saveActivityAttempt(activityId: string, attemptData: Partial<ActivityAttempt>): Promise<{ success: boolean; attempt: ActivityAttempt }> {
@@ -136,7 +187,7 @@ export const classroomApi = {
   async setUser(user: Partial<ClassroomUser> & { id: string; name: string; role: 'TEACHER' | 'STUDENT' }): Promise<ClassroomUser> {
     const res = await fetch('/api/auth/user', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(user),
     });
     return res.json();
@@ -154,13 +205,17 @@ export const classroomApi = {
   },
 
   // Classrooms
-  async getClassrooms(userId: string): Promise<Classroom[]> {
-    const res = await fetch(`/api/classrooms?userId=${encodeURIComponent(userId)}`);
+  async getClassrooms(_userId?: string): Promise<Classroom[]> {
+    const res = await fetch('/api/classrooms', {
+      headers: getAuthHeaders(),
+    });
     return res.json();
   },
 
   async getClassroom(id: string): Promise<Classroom> {
-    const res = await fetch(`/api/classrooms/${id}`);
+    const res = await fetch(`/api/classrooms/${id}`, {
+      headers: getAuthHeaders(),
+    });
     return res.json();
   },
 
@@ -174,7 +229,7 @@ export const classroomApi = {
   ): Promise<Classroom> {
     const res = await fetch('/api/classrooms', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ name, teacherId, teacherName, department, year, batch }),
     });
     return res.json();
@@ -183,26 +238,30 @@ export const classroomApi = {
   async joinClassroom(code: string, user: ClassroomUser): Promise<{ success: boolean; message: string; classroom?: Classroom }> {
     const res = await fetch('/api/classrooms/join', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ code, user }),
     });
     return res.json();
   },
 
   async getClassroomStudents(classroomId: string): Promise<ClassroomMember[]> {
-    const res = await fetch(`/api/classrooms/${classroomId}/students`);
+    const res = await fetch(`/api/classrooms/${classroomId}/students`, {
+      headers: getAuthHeaders(),
+    });
     return res.json();
   },
 
   async getClassroomActivities(classroomId: string): Promise<ClassroomActivity[]> {
-    const res = await fetch(`/api/classrooms/${classroomId}/activities`);
+    const res = await fetch(`/api/classrooms/${classroomId}/activities`, {
+      headers: getAuthHeaders(),
+    });
     return res.json();
   },
 
   async createActivity(classroomId: string, data: any): Promise<ClassroomActivity> {
     const res = await fetch(`/api/classrooms/${classroomId}/activities`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return res.json();
@@ -210,14 +269,16 @@ export const classroomApi = {
 
   // Activity Controls
   async getActivity(activityId: string): Promise<ClassroomActivity> {
-    const res = await fetch(`/api/activities/${activityId}`);
+    const res = await fetch(`/api/activities/${activityId}`, {
+      headers: getAuthHeaders(),
+    });
     return res.json();
   },
 
   async joinActivity(activityId: string, user: ClassroomUser): Promise<any> {
     const res = await fetch(`/api/activities/${activityId}/join`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ user }),
     });
     return res.json();
@@ -226,7 +287,7 @@ export const classroomApi = {
   async startActivity(activityId: string, userId?: string): Promise<ClassroomActivity> {
     const res = await fetch(`/api/activities/${activityId}/start`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ userId }),
     });
     return res.json();
@@ -235,7 +296,7 @@ export const classroomApi = {
   async pauseActivity(activityId: string, userId?: string): Promise<ClassroomActivity> {
     const res = await fetch(`/api/activities/${activityId}/pause`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ userId }),
     });
     return res.json();
@@ -244,7 +305,7 @@ export const classroomApi = {
   async resumeActivity(activityId: string, userId?: string): Promise<ClassroomActivity> {
     const res = await fetch(`/api/activities/${activityId}/resume`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ userId }),
     });
     return res.json();
@@ -253,7 +314,7 @@ export const classroomApi = {
   async nextRound(activityId: string, userId?: string): Promise<ClassroomActivity> {
     const res = await fetch(`/api/activities/${activityId}/next-round`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ userId }),
     });
     return res.json();
@@ -262,7 +323,7 @@ export const classroomApi = {
   async endActivity(activityId: string, userId?: string): Promise<ClassroomActivity> {
     const res = await fetch(`/api/activities/${activityId}/end`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ userId }),
     });
     return res.json();
@@ -279,7 +340,9 @@ export const classroomApi = {
     serverTime: number;
   }> {
     const url = `/api/activities/${activityId}/state${studentId ? `?studentId=${encodeURIComponent(studentId)}` : ''}`;
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: getAuthHeaders(),
+    });
     return res.json();
   },
 
@@ -287,8 +350,8 @@ export const classroomApi = {
     activityId: string,
     roundId: string,
     data: {
-      studentId: string;
-      studentName: string;
+      studentId?: string;
+      studentName?: string;
       decision: 'BUY' | 'SELL' | 'HOLD';
       quantity: number;
       stopLoss: number;
@@ -303,7 +366,7 @@ export const classroomApi = {
   }> {
     const res = await fetch(`/api/activities/${activityId}/rounds/${roundId}/submit`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     if (!res.ok) {
@@ -314,12 +377,16 @@ export const classroomApi = {
   },
 
   async getLeaderboard(activityId: string): Promise<LeaderboardEntry[]> {
-    const res = await fetch(`/api/activities/${activityId}/leaderboard`);
+    const res = await fetch(`/api/activities/${activityId}/leaderboard`, {
+      headers: getAuthHeaders(),
+    });
     return res.json();
   },
 
   async getResults(activityId: string): Promise<ClassroomResultsResponse> {
-    const res = await fetch(`/api/activities/${activityId}/results`);
+    const res = await fetch(`/api/activities/${activityId}/results`, {
+      headers: getAuthHeaders(),
+    });
     return res.json();
   },
 
@@ -330,15 +397,17 @@ export const classroomApi = {
     totalQuestions: number;
     scoringRule: string;
   }> {
-    const res = await fetch(`/api/activities/${activityId}/quiz/questions?roundNumber=${roundNumber}`);
+    const res = await fetch(`/api/activities/${activityId}/quiz/questions?roundNumber=${roundNumber}`, {
+      headers: getAuthHeaders(),
+    });
     return res.json();
   },
 
   async submitQuizAnswer(
     activityId: string,
     data: {
-      studentId: string;
-      studentName: string;
+      studentId?: string;
+      studentName?: string;
       studentAvatar?: string;
       roundNumber: 1 | 2;
       questionNumber: number;
@@ -357,7 +426,7 @@ export const classroomApi = {
   }> {
     const res = await fetch(`/api/activities/${activityId}/quiz/submit`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     if (!res.ok) {
@@ -367,13 +436,18 @@ export const classroomApi = {
     return res.json();
   },
 
-  async getStudentQuizAnswers(activityId: string, studentId: string): Promise<any[]> {
-    const res = await fetch(`/api/activities/${activityId}/quiz/student-answers?studentId=${encodeURIComponent(studentId)}`);
+  async getStudentQuizAnswers(activityId: string, studentId?: string): Promise<any[]> {
+    const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : '';
+    const res = await fetch(`/api/activities/${activityId}/quiz/student-answers${query}`, {
+      headers: getAuthHeaders(),
+    });
     return res.json();
   },
 
   async getQuizSummary(activityId: string): Promise<any> {
-    const res = await fetch(`/api/activities/${activityId}/quiz/summary`);
+    const res = await fetch(`/api/activities/${activityId}/quiz/summary`, {
+      headers: getAuthHeaders(),
+    });
     return res.json();
   },
 

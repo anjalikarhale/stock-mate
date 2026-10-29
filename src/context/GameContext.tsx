@@ -17,7 +17,7 @@ import { INITIAL_STOCKS } from '../data/marketData';
 import { PROGRESSION_LEVELS, INITIAL_DAILY_QUESTS } from '../data/curriculum';
 import { BEGINNER_MISSIONS } from '../data/missionsData';
 import { NCFM_LESSONS } from '../data/ncfmCourseData';
-import { loadSavedProfile, saveProfile, DEFAULT_PLAYER_PROFILE } from '../utils/storage';
+import { loadSavedProfile, saveProfile, DEFAULT_PLAYER_PROFILE, clearAllLearningProgress } from '../utils/storage';
 import { soundEffects, isSoundEnabled, setSoundEnabled } from '../utils/audio';
 
 interface GameContextType {
@@ -61,6 +61,8 @@ interface GameContextType {
   startMission: (missionId: string) => void;
   completeMission: (missionId: string) => void;
   completeNcfmLesson: (lessonId: string, earnedXp: number) => void;
+  completeCourseTopic: (topicId: string, earnedXp: number) => void;
+  resetLearningProgress: () => void;
   toggleWatchlist: (symbol: string) => void;
   isNcfmLessonUnlocked: (lessonId: string) => boolean;
   skipTutorialWithDiagnostic: (scorePercent: number) => void;
@@ -548,6 +550,40 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
+  const completeCourseTopic = (topicId: string, earnedXp: number) => {
+    setProfile(prev => {
+      const alreadyCompleted = (prev.completedCourseTopics || []).includes(topicId);
+      if (alreadyCompleted) return prev;
+      const updated = [...(prev.completedCourseTopics || []), topicId];
+      return {
+        ...prev,
+        xp: prev.xp + earnedXp,
+        completedCourseTopics: updated,
+      };
+    });
+    soundEffects.correct();
+    try {
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+    } catch {}
+  };
+
+  const resetLearningProgress = () => {
+    clearAllLearningProgress();
+    setProfile(prev => ({
+      ...prev,
+      completedCourseTopics: [],
+      completedMissions: [],
+      completedNcfmLessons: [],
+      xp: 0,
+      level: 1,
+    }));
+    soundEffects.click();
+  };
+
   const toggleWatchlist = (symbol: string) => {
     soundEffects.click();
     setProfile(prev => {
@@ -682,6 +718,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         startMission,
         completeMission,
         completeNcfmLesson,
+        completeCourseTopic,
+        resetLearningProgress,
         toggleWatchlist,
         isNcfmLessonUnlocked,
         skipTutorialWithDiagnostic,

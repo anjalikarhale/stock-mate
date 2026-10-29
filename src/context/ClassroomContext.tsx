@@ -27,7 +27,7 @@ interface ClassroomContextType {
   loginAsTeacher: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   loginAsStudent: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   signupStudent: (data: { name: string; email: string; password: string }) => Promise<{ success: boolean; error?: string }>;
-  signupTeacher: (data: { name: string; email: string; password: string }) => Promise<{ success: boolean; error?: string }>;
+  signupTeacher: (data: { name: string; email: string; password: string; inviteCode?: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   myClassrooms: Classroom[];
   activeClassroom: Classroom | null;
@@ -73,6 +73,11 @@ const CLASSROOM_USER_KEY = 'stockmate_classroom_user_v2';
 function loadInitialUser(): ClassroomUser | null {
   if (typeof window !== 'undefined') {
     try {
+      const token = classroomApi.getAuthToken();
+      if (!token) {
+        localStorage.removeItem(CLASSROOM_USER_KEY);
+        return null;
+      }
       const raw = localStorage.getItem(CLASSROOM_USER_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
@@ -109,6 +114,31 @@ export const ClassroomProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [activeView, setActiveView] = useState<'LIST' | 'WAITING_ROOM' | 'ACTIVITY' | 'TEACHER_MONITOR' | 'RESULTS'>('LIST');
   const [roundTimeRemaining, setRoundTimeRemaining] = useState<number>(0);
+
+  // Validate session token on mount
+  useEffect(() => {
+    const token = classroomApi.getAuthToken();
+    if (token) {
+      classroomApi.getMe().then((res) => {
+        if (!res.success || !res.user) {
+          setCurrentUser(null);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(CLASSROOM_USER_KEY);
+          }
+          classroomApi.setAuthToken(null);
+        } else {
+          setCurrentUser(res.user);
+        }
+      }).catch(() => {
+        // network error
+      });
+    } else {
+      setCurrentUser(null);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(CLASSROOM_USER_KEY);
+      }
+    }
+  }, []);
 
   // Sync user with backend on init or change
   useEffect(() => {
@@ -468,13 +498,14 @@ export const ClassroomProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const signupTeacher = async (data: { name: string; email: string; password: string }): Promise<{ success: boolean; error?: string }> => {
+  const signupTeacher = async (data: { name: string; email: string; password: string; inviteCode?: string }): Promise<{ success: boolean; error?: string }> => {
     try {
       const res = await classroomApi.signup({
         name: data.name,
         email: data.email,
         password: data.password,
         role: 'TEACHER',
+        inviteCode: data.inviteCode,
       });
       if (!res.success || !res.user) {
         return { success: false, error: res.error || 'Teacher registration failed.' };

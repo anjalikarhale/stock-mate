@@ -1,6 +1,6 @@
 // Frontend types for Classroom Activity system
 
-export type UserRole = 'TEACHER' | 'STUDENT';
+export type UserRole = 'TEACHER' | 'STUDENT' | 'ADMIN';
 
 export interface ClassroomUser {
   id: string;

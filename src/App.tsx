@@ -18,9 +18,10 @@ import { TradingTerminal } from './components/trading/TradingTerminal';
 import { ClassroomHub } from './components/classroom/ClassroomHub';
 import { SimpleTeacherDashboard } from './components/classroom/SimpleTeacherDashboard';
 import { StockMateAuth } from './components/auth/StockMateAuth';
-import { AIMentorModal } from './components/mentor/AIMentorModal';
 import { LeaderboardModal } from './components/leaderboard/LeaderboardModal';
-import { Sparkles, Bot } from 'lucide-react';
+import { AdminLogin } from './components/admin/AdminLogin';
+import { AdminPortal } from './components/admin/AdminPortal';
+import { Sparkles, Bot, Shield } from 'lucide-react';
 import { soundEffects } from './utils/audio';
 import { AppMode } from './types';
 
@@ -33,10 +34,68 @@ const AppContent: React.FC = () => {
     setActiveGame,
     setActiveMissionId,
     startMission,
-    setAIMentorOpen,
   } = useGame();
 
   const { currentUser, isAuthenticated } = useClassroom();
+
+  // Admin Portal State
+  const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.location.pathname.toLowerCase().startsWith('/admin');
+    }
+    return false;
+  });
+
+  const [adminToken, setAdminToken] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('stockmate_admin_token');
+    }
+    return null;
+  });
+
+  const [adminUser, setAdminUser] = useState<any>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('stockmate_admin_user');
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch {
+          return null;
+        }
+      }
+    }
+    return null;
+  });
+
+  const handleAdminSuccess = (user: any, token: string) => {
+    setAdminUser(user);
+    setAdminToken(token);
+    setIsAdminRoute(true);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/admin');
+    }
+  };
+
+  const handleAdminLogout = () => {
+    localStorage.removeItem('stockmate_admin_token');
+    localStorage.removeItem('stockmate_admin_user');
+    setAdminUser(null);
+    setAdminToken(null);
+  };
+
+  const handleNavigateToAdmin = () => {
+    setIsAdminRoute(true);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/admin');
+    }
+  };
+
+  const handleBackFromAdmin = () => {
+    setIsAdminRoute(false);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/');
+    }
+  };
 
   // Parse direct classroom join query params
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
@@ -96,6 +155,13 @@ const AppContent: React.FC = () => {
 
     const handlePopState = () => {
       const path = window.location.pathname.toLowerCase();
+      if (path.startsWith('/admin')) {
+        setIsAdminRoute(true);
+        return;
+      } else {
+        setIsAdminRoute(false);
+      }
+
       if (!isAuthenticated || !currentUser) return;
 
       if (currentUser.role === 'TEACHER') {
@@ -163,10 +229,37 @@ const AppContent: React.FC = () => {
   }, [joinParam, isAuthenticated, currentUser, handleSelectTab]);
 
   // =========================================================================
+  // 0. ADMIN PORTAL ROUTE: Dedicated Administrator Control Hub (NO SIGN UP)
+  // =========================================================================
+  if (isAdminRoute) {
+    if (adminUser && adminToken) {
+      return (
+        <AdminPortal
+          adminUser={adminUser}
+          token={adminToken}
+          onLogout={handleAdminLogout}
+          onSwitchToStudentView={handleBackFromAdmin}
+        />
+      );
+    }
+    return (
+      <AdminLogin
+        onSuccess={handleAdminSuccess}
+        onBackToApp={handleBackFromAdmin}
+      />
+    );
+  }
+
+  // =========================================================================
   // 1. PUBLIC LANDING PAGE: Anyone opening URL sees StockMate Welcome Portal
   // =========================================================================
   if (!isAuthenticated || !currentUser) {
-    return <StockMateAuth pendingClassroomCode={joinParam || undefined} />;
+    return (
+      <StockMateAuth
+        pendingClassroomCode={joinParam || undefined}
+        onNavigateToAdmin={handleNavigateToAdmin}
+      />
+    );
   }
 
   // =========================================================================
@@ -260,25 +353,7 @@ const AppContent: React.FC = () => {
         {renderActiveScreen()}
       </main>
 
-      {/* Floating Ask Arya (AI Mentor) Quick Action Button */}
-      <button
-        onClick={() => {
-          soundEffects.click();
-          setAIMentorOpen(true);
-        }}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-500 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs sm:text-sm shadow-2xl shadow-indigo-600/50 hover:scale-105 active:scale-95 transition-all cursor-pointer border border-indigo-400/30 group"
-        title="Open Arya - Socratic AI Market Mentor"
-      >
-        <span className="relative flex h-3 w-3">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-        </span>
-        <Sparkles className="w-4 h-4 text-amber-300 group-hover:rotate-12 transition-transform" />
-        <span>Ask Arya (AI Mentor)</span>
-      </button>
-
-      {/* Global AI Mentor & Leaderboard Modals */}
-      <AIMentorModal />
+      {/* Global Modals */}
       <LeaderboardModal />
 
       {/* Footer */}
@@ -290,6 +365,16 @@ const AppContent: React.FC = () => {
           <p className="text-[11px] text-slate-400">
             Interactive candlestick mechanics, paper trading terminal, and classroom market challenges. All funds are simulated.
           </p>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={handleNavigateToAdmin}
+              className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-amber-300 font-medium transition-colors cursor-pointer"
+            >
+              <Shield className="w-3 h-3 text-amber-400/80" />
+              Administrator Portal
+            </button>
+          </div>
         </div>
       </footer>
     </div>

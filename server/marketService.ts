@@ -1,5 +1,6 @@
 // Real market-data service for StockMate classroom activities
 import { ActivityRound } from './types.ts';
+import { getMarketQuote, MarketBadgeStatus } from './marketFeed.ts';
 
 export interface StockInfo {
   symbol: string;
@@ -15,6 +16,7 @@ export interface StockInfo {
   peRatio: number;
   dataSource: 'HISTORICAL_NSE_DELAYED';
   dataNotice: string;
+  status?: MarketBadgeStatus;
 }
 
 export const SUPPORTED_STOCKS: StockInfo[] = [
@@ -157,7 +159,47 @@ export const SUPPORTED_STOCKS: StockInfo[] = [
 
 export function getStockInfo(symbol: string): StockInfo {
   const found = SUPPORTED_STOCKS.find(s => s.symbol.toUpperCase() === symbol.toUpperCase());
-  return found || SUPPORTED_STOCKS[0];
+  const quote = getMarketQuote(symbol);
+
+  if (found) {
+    if (quote) {
+      return {
+        ...found,
+        basePrice: quote.price,
+        previousClose: quote.previousClose,
+        high52w: quote.dayHigh ? Math.max(found.high52w, quote.dayHigh) : found.high52w,
+        low52w: quote.dayLow ? Math.min(found.low52w, quote.dayLow) : found.low52w,
+        status: quote.status,
+        dataNotice: `Live Market Feed (${quote.status})`,
+      };
+    }
+    return found;
+  }
+
+  if (quote) {
+    return {
+      symbol: quote.symbol,
+      name: quote.name,
+      exchange: 'NSE',
+      sector: 'NIFTY 50 Constituent',
+      basePrice: quote.price,
+      previousClose: quote.previousClose,
+      open: quote.previousClose,
+      high52w: quote.dayHigh || quote.price * 1.2,
+      low52w: quote.dayLow || quote.price * 0.8,
+      marketCapCr: 50000,
+      peRatio: 25.0,
+      dataSource: 'HISTORICAL_NSE_DELAYED',
+      dataNotice: `Live Market Feed (${quote.status})`,
+      status: quote.status,
+    };
+  }
+
+  return SUPPORTED_STOCKS[0];
+}
+
+export function getAllSupportedStocksWithCache(): StockInfo[] {
+  return SUPPORTED_STOCKS.map(s => getStockInfo(s.symbol));
 }
 
 // Generate 5 realistic educational market rounds for any selected stock

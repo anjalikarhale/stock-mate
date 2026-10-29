@@ -237,6 +237,7 @@ export interface PlayerProfile {
   hasCompletedOnboarding: boolean;
   completedMissions: string[];
   completedNcfmLessons?: string[];
+  completedCourseTopics?: string[];
   watchlist?: string[];
   currentMissionId: string;
   unlockedFeatures: string[];

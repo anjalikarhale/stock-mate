@@ -293,18 +293,6 @@ What key patterns, momentum signals, and stop loss levels should a disciplined t
             </span>
           )}
         </div>
-
-        {/* Right: Socratic AI Mentor Insight Button */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleAskMentorChart}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs shadow-md shadow-indigo-950/50 hover:scale-105 active:scale-95 transition-all cursor-pointer border border-indigo-400/30"
-            title="Ask Arya for instant socratic chart analysis"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-spin-slow" />
-            <span>Analyze with Arya</span>
-          </button>
-        </div>
       </div>
 
       {/* Sub-toolbar: Timeframes, Chart Style & Indicator Toggles */}

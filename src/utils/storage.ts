@@ -1,8 +1,8 @@
 import { PlayerProfile } from '../types';
-import { INITIAL_ACHIEVEMENTS, INITIAL_DAILY_QUESTS } from '../data/curriculum';
+import { INITIAL_ACHIEVEMENTS } from '../data/curriculum';
 import { APP_CONFIG } from '../config/theme';
 
-const STORAGE_KEY = 'market_quest_rpg_profile_v2';
+const STORAGE_KEY = 'stockmate_course_progress_v5';
 
 export const DEFAULT_PLAYER_PROFILE: PlayerProfile = {
   id: 'player-alpha-1',
@@ -34,14 +34,15 @@ export const DEFAULT_PLAYER_PROFILE: PlayerProfile = {
   highScoreCombat: 0,
   highScoreDetective: 0,
   crashesSurvived: 0,
-  // Progressive Journey Setup
+  // Progressive Course Learning Setup - All reset to 0
   appMode: 'HOME',
   hasCompletedOnboarding: false,
   completedMissions: [],
   completedNcfmLessons: [],
+  completedCourseTopics: [],
   watchlist: ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY'],
-  currentMissionId: 'mission-1',
-  unlockedFeatures: ['Stock Basics', 'mission-1'],
+  currentMissionId: 'b-u1-t1',
+  unlockedFeatures: ['Stock Basics', 'b-u1-t1'],
   traderFiTokens: 100,
   tournamentsWon: 0,
   tournamentsPlayed: 0,
@@ -58,14 +59,15 @@ export function loadSavedProfile(): PlayerProfile {
       ...parsed,
       stats: {
         ...DEFAULT_PLAYER_PROFILE.stats,
-        ...(parsed.stats || {})
+        ...(parsed.stats || {}),
       },
       positions: parsed.positions || [],
       achievements: parsed.achievements || INITIAL_ACHIEVEMENTS,
       completedMissions: parsed.completedMissions || [],
       completedNcfmLessons: parsed.completedNcfmLessons || [],
+      completedCourseTopics: parsed.completedCourseTopics || [],
       watchlist: parsed.watchlist || ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY'],
-      unlockedFeatures: parsed.unlockedFeatures || ['Stock Basics', 'mission-1'],
+      unlockedFeatures: parsed.unlockedFeatures || ['Stock Basics', 'b-u1-t1'],
     };
   } catch {
     return DEFAULT_PLAYER_PROFILE;
@@ -78,5 +80,17 @@ export function saveProfile(profile: PlayerProfile): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
   } catch (err) {
     console.error('Failed to save profile state:', err);
+  }
+}
+
+export function clearAllLearningProgress(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    // Also remove old legacy keys to guarantee 100% reset to zero
+    localStorage.removeItem('market_quest_rpg_profile_v2');
+    localStorage.removeItem('market_quest_course_profile_v3');
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (err) {
+    console.error('Error clearing progress:', err);
   }
 }

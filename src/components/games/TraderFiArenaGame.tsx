@@ -185,39 +185,47 @@ export const TraderFiArenaGame: React.FC = () => {
   useEffect(() => {
     if (!gameStarted || isPaused || roundOver) return;
 
+    let tickCount = 0;
+
     const tickInterval = setInterval(() => {
-      const delta = (Math.random() - 0.48) * 0.04;
-      const nextPrice = Math.round(Math.max(30, currentPrice + delta) * 100) / 100;
+      tickCount++;
+      // Dynamic momentum wave combining cyclical swing with random walk
+      const cycle = Math.sin(Date.now() / 6000) * 0.25;
+      const noise = (Math.random() - 0.48) * 0.4;
+      const delta = Math.round((cycle + noise) * 100) / 100;
+      const nextPrice = Math.round(Math.max(25, currentPrice + delta) * 100) / 100;
       const changePct = Math.round(((nextPrice - currentPrice) / currentPrice) * 10000) / 100;
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 
       setCurrentPrice(nextPrice);
 
-      // Update latest candle or add a new candle
+      // Update latest candle or push new rolling candle
       setCandles(prev => {
+        if (!prev.length) return prev;
         const lastCandle = prev[prev.length - 1];
-        if (!lastCandle) return prev;
 
         const updatedLast: ArenaCandle = {
           ...lastCandle,
           high: Math.max(lastCandle.high, nextPrice),
           low: Math.min(lastCandle.low, nextPrice),
           close: nextPrice,
-          volume: lastCandle.volume + Math.floor(Math.random() * 800) + 200,
+          volume: lastCandle.volume + Math.floor(Math.random() * 1200) + 400,
         };
 
-        // Every 6 ticks, push a new candle to keep chart moving forward
-        if (Math.random() > 0.65 && prev.length < 35) {
+        // Every 5 ticks, create a brand new candle and shift forward
+        if (tickCount % 5 === 0) {
           const newCandle: ArenaCandle = {
             time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
             open: nextPrice,
             high: nextPrice,
             low: nextPrice,
             close: nextPrice,
-            volume: Math.floor(Math.random() * 5000) + 5000,
+            volume: Math.floor(Math.random() * 6000) + 4000,
           };
-          return [...prev.slice(-30), updatedLast, newCandle];
+          // Keep a healthy visible window of 25-30 candles
+          const base = prev.length >= 28 ? prev.slice(1) : prev;
+          return [...base.slice(0, -1), updatedLast, newCandle];
         }
 
         return [...prev.slice(0, -1), updatedLast];
@@ -227,22 +235,22 @@ export const TraderFiArenaGame: React.FC = () => {
       setTapeTicks(prev => [
         {
           time: timeStr,
-          last: Number(nextPrice.toFixed(4)),
+          last: Number(nextPrice.toFixed(2)),
           change: changePct,
-          size: Math.floor(Math.random() * 4000) + 500,
+          size: Math.floor(Math.random() * 5000) + 500,
           market: 'NYSE',
         },
-        ...prev.slice(0, 6),
+        ...prev.slice(0, 7),
       ]);
 
       // Subtly fluctuate competitor scores for live realism
       setCompetitors(prev =>
         prev.map(c => ({
           ...c,
-          profit: Math.round((c.profit + (Math.random() - 0.47) * 45) * 100) / 100,
+          profit: Math.round((c.profit + (Math.random() - 0.47) * 60) * 100) / 100,
         }))
       );
-    }, 1200);
+    }, 850);
 
     return () => clearInterval(tickInterval);
   }, [gameStarted, currentPrice, isPaused, roundOver]);
