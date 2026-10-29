@@ -1,4 +1,4 @@
-// Core types for Market Quest RPG
+// Core types for StockMate — Indian Stock Market Learning & Paper Trading Simulator
 
 export type DistrictId =
   | 'bank-district'
@@ -10,7 +10,18 @@ export type DistrictId =
   | 'derivatives-arena'
   | 'quant-lab';
 
+export type EducationalGameId =
+  | 'candlestick-detective'
+  | 'bull-vs-bear-market'
+  | 'trade-decision-simulator'
+  | 'portfolio-builder'
+  | 'risk-manager-challenge'
+  | 'option-chain-explorer'
+  | 'market-crash-survival'
+  | 'fundamental-analysis-challenge';
+
 export type GameId =
+  | EducationalGameId
   | 'traderfi-arena'
   | 'tournament-lobby'
   | 'candlestick-combat'
@@ -90,6 +101,51 @@ export interface Position {
   unrealizedPnLPercent: number;
 }
 
+export interface OptionPosition {
+  contractKey: string;
+  underlying: 'NIFTY' | 'BANKNIFTY' | 'SENSEX' | string;
+  exchange: 'NSE' | 'BSE';
+  expiry: string;
+  strike: number;
+  optionType: 'CE' | 'PE';
+  tradingSymbol: string;
+  side: 'LONG' | 'SHORT';
+  lots: number;
+  lotSize: number;
+  quantity: number;
+  averagePrice: number;
+  currentPrice: number;
+  marginBlocked: number;
+  unrealizedPnL: number;
+  unrealizedPnLPercent: number;
+  openedAt: string;
+  dataStatus?: string;
+}
+
+export interface OptionOrder {
+  id: string;
+  contractKey: string;
+  underlying: string;
+  exchange: 'NSE' | 'BSE';
+  expiry: string;
+  strike: number;
+  optionType: 'CE' | 'PE';
+  tradingSymbol: string;
+  action: 'BUY' | 'SELL';
+  lots: number;
+  lotSize: number;
+  quantity: number;
+  executionPrice: number;
+  premiumTurnover: number;
+  estimatedCharges: number;
+  marginImpact: number;
+  realizedPnL?: number;
+  status: 'EXECUTED' | 'REJECTED';
+  timestamp: string;
+  rationale?: string;
+  dataStatus?: string;
+}
+
 export interface Order {
   id: string;
   symbol: string;
@@ -120,6 +176,45 @@ export interface TradingJournalEntry {
   emotionalState: string;
   pnl?: number;
   lessonLearned?: string;
+}
+
+export interface CompanyWorksheetDraft {
+  companyName: string;
+  ticker: string;
+  businessModel: string;
+  revenueGrowth5Y: string;
+  profitabilityRoeRoce: string;
+  balanceSheetDebt: string;
+  cashFlowOcfVsPat: string;
+  governancePromoter: string;
+  competitiveMoat: string;
+  valuationVsPeers: string;
+  keyRisksInvalidation: string;
+  updatedAt: string;
+}
+
+export interface GameScoreRecord {
+  gameId: string;
+  gameTitle: string;
+  moduleId: string;
+  bestScore: number;
+  lastScore: number;
+  maxPossibleScore: number;
+  bestDifficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+  attemptsCount: number;
+  completed: boolean;
+  lastPlayedAt: string;
+}
+
+export interface ActiveMentorContext {
+  currentTab?: string;
+  activeModuleId?: string;
+  activeModuleTitle?: string;
+  activeLessonId?: string;
+  activeLessonTitle?: string;
+  selectedSymbol?: string;
+  selectedTimeframe?: string;
+  tradingMode?: 'EQUITY' | 'INDEX' | 'OPTIONS';
 }
 
 export interface PlayerStats {
@@ -185,7 +280,18 @@ export interface LevelInfo {
   bossRequirement?: string;
 }
 
-export type AppMode = 'HOME' | 'LEARN' | 'PLAY' | 'TRADE' | 'PORTFOLIO' | 'PROFILE' | 'CLASSROOM' | 'PRACTICE' | 'JOURNEY' | 'FREE' | 'CHART_ANALYSIS';
+export type AppMode =
+  | 'HOME'
+  | 'LEARN'
+  | 'PLAY'
+  | 'TRADE'
+  | 'PORTFOLIO'
+  | 'PROFILE'
+  | 'CLASSROOM'
+  | 'PRACTICE'
+  | 'JOURNEY'
+  | 'FREE'
+  | 'CHART_ANALYSIS';
 
 export type OnboardingStep =
   | 'WELCOME'
@@ -201,7 +307,17 @@ export interface Mission {
   subtitle: string;
   stage: number;
   stageName: string;
-  category: 'INVESTING_BASICS' | 'STOCKS' | 'DEMAND_SUPPLY' | 'TRADING' | 'PORTFOLIO' | 'RISK' | 'VOLATILITY' | 'CHARTS' | 'CANDLESTICKS' | 'SUPPORT_RESISTANCE';
+  category:
+    | 'INVESTING_BASICS'
+    | 'STOCKS'
+    | 'DEMAND_SUPPLY'
+    | 'TRADING'
+    | 'PORTFOLIO'
+    | 'RISK'
+    | 'VOLATILITY'
+    | 'CHARTS'
+    | 'CANDLESTICKS'
+    | 'SUPPORT_RESISTANCE';
   estimatedMinutes: number;
   xpReward: number;
   cashReward: number;
@@ -222,7 +338,9 @@ export interface PlayerProfile {
   careerPath: CareerPath;
   stats: PlayerStats;
   positions: Position[];
+  optionPositions?: OptionPosition[];
   orders: Order[];
+  optionOrders?: OptionOrder[];
   journal: TradingJournalEntry[];
   mistakes: MistakeEntry[];
   achievements: Achievement[];
@@ -232,12 +350,20 @@ export interface PlayerProfile {
   highScoreCombat: number;
   highScoreDetective: number;
   crashesSurvived: number;
-  // Guided Journey & Progressive Unlocks State
+  // Guided Journey & 16-Module Course State
   appMode: AppMode;
   hasCompletedOnboarding: boolean;
   completedMissions: string[];
   completedNcfmLessons?: string[];
   completedCourseTopics?: string[];
+  completedModules?: string[];
+  completedLessons?: string[];
+  completedExercises?: string[];
+  moduleQuizScores?: Record<string, number>;
+  lastActiveModuleId?: string;
+  lastActiveLessonId?: string;
+  worksheetDraft?: CompanyWorksheetDraft;
+  gameScores?: Record<string, GameScoreRecord>;
   watchlist?: string[];
   currentMissionId: string;
   unlockedFeatures: string[];

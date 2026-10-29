@@ -8,26 +8,75 @@ import { StudentPlayArcade } from './components/arcade/StudentPlayArcade';
 import { StudentPortfolioView } from './components/portfolio/StudentPortfolioView';
 import { StudentProfileView } from './components/profile/StudentProfileView';
 import { MissionRunner } from './components/missions/MissionRunner';
+import {
+  StockMarketGameRunner,
+  STOCK_MARKET_8_GAMES,
+} from './components/games/StockMarketGameSuite';
 import { PricePredictionGame } from './components/games/PricePredictionGame';
 import { PortfolioTycoonGame } from './components/games/PortfolioTycoonGame';
 import { CandlestickCombat } from './components/games/CandlestickCombat';
 import { ChartDetective } from './components/games/ChartDetective';
 import { MarketCrashGame } from './components/games/MarketCrashGame';
-import { TraderFiArenaGame } from './components/games/TraderFiArenaGame';
 import { TradingTerminal } from './components/trading/TradingTerminal';
 import { ClassroomHub } from './components/classroom/ClassroomHub';
 import { SimpleTeacherDashboard } from './components/classroom/SimpleTeacherDashboard';
 import { StockMateAuth } from './components/auth/StockMateAuth';
 import { LeaderboardModal } from './components/leaderboard/LeaderboardModal';
+import { AIMentorModal } from './components/mentor/AIMentorModal';
 import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminPortal } from './components/admin/AdminPortal';
-import { Sparkles, Bot, Shield } from 'lucide-react';
-import { soundEffects } from './utils/audio';
-import { AppMode } from './types';
+import { Shield, AlertTriangle, RotateCcw } from 'lucide-react';
+import { AppMode, EducationalGameId } from './types';
+
+const EDUCATIONAL_GAME_IDS = new Set<string>(STOCK_MARKET_8_GAMES.map((g) => g.id));
+
+const ReactComponent = React.Component as unknown as {
+  new (props: { resetKey: string; children: React.ReactNode }): {
+    props: { resetKey: string; children: React.ReactNode };
+    state: { error: Error | null };
+    setState(s: { error: Error | null }): void;
+    componentDidUpdate?(prevProps: { resetKey: string }): void;
+    render(): React.ReactNode;
+  };
+};
+
+class ScreenErrorBoundary extends ReactComponent {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidUpdate(prevProps: { resetKey: string }) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.error) {
+      this.setState({ error: null });
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="rounded-2xl bg-slate-900 border border-rose-500/40 p-8 text-center space-y-4 max-w-xl mx-auto my-8">
+          <AlertTriangle className="w-8 h-8 text-rose-400 mx-auto" />
+          <h2 className="text-base font-black text-white">This view encountered an unexpected error</h2>
+          <p className="text-xs text-slate-400 font-mono">{this.state.error.message}</p>
+          <button
+            type="button"
+            onClick={() => this.setState({ error: null })}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reload View
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const AppContent: React.FC = () => {
   const {
-    profile,
     activeGame,
     activeMissionId,
     setAppMode,
@@ -98,8 +147,10 @@ const AppContent: React.FC = () => {
   };
 
   // Parse direct classroom join query params
-  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const joinParam = searchParams?.get('join') || searchParams?.get('code') || searchParams?.get('class');
+  const searchParams =
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const joinParam =
+    searchParams?.get('join') || searchParams?.get('code') || searchParams?.get('class');
 
   // Detect path for tab mapping
   const getTabFromPath = useCallback((pathname: string): AppMode => {
@@ -124,7 +175,6 @@ const AppContent: React.FC = () => {
   // Switch student tab and sync browser URL history
   const handleSelectTab = useCallback(
     (tab: AppMode) => {
-      // Clear active mini-games/missions when switching tabs
       setActiveGame(null);
       setActiveMissionId(null);
       setCurrentTab(tab);
@@ -170,7 +220,6 @@ const AppContent: React.FC = () => {
         }
       } else if (currentUser.role === 'STUDENT') {
         if (path.startsWith('/teacher')) {
-          // Block teacher path and redirect to student dashboard
           window.history.replaceState({}, '', '/student/dashboard');
           setCurrentTab('HOME');
           setAppMode('HOME');
@@ -186,7 +235,14 @@ const AppContent: React.FC = () => {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [isAuthenticated, currentUser, getTabFromPath, setActiveGame, setActiveMissionId, setAppMode]);
+  }, [
+    isAuthenticated,
+    currentUser,
+    getTabFromPath,
+    setActiveGame,
+    setActiveMissionId,
+    setAppMode,
+  ]);
 
   // Synchronize browser URL based on user role and current route
   useEffect(() => {
@@ -195,7 +251,6 @@ const AppContent: React.FC = () => {
 
     const path = window.location.pathname.toLowerCase();
 
-    // 1. TEACHER: Enforce /teacher/dashboard
     if (currentUser.role === 'TEACHER') {
       if (!path.startsWith('/teacher')) {
         window.history.replaceState({}, '', '/teacher/dashboard');
@@ -203,7 +258,6 @@ const AppContent: React.FC = () => {
       return;
     }
 
-    // 2. STUDENT: Block any teacher URLs and redirect to /student/dashboard
     if (currentUser.role === 'STUDENT') {
       if (path.startsWith('/teacher')) {
         window.history.replaceState({}, '', '/student/dashboard');
@@ -228,9 +282,7 @@ const AppContent: React.FC = () => {
     }
   }, [joinParam, isAuthenticated, currentUser, handleSelectTab]);
 
-  // =========================================================================
-  // 0. ADMIN PORTAL ROUTE: Dedicated Administrator Control Hub (NO SIGN UP)
-  // =========================================================================
+  // 0. ADMIN PORTAL ROUTE
   if (isAdminRoute) {
     if (adminUser && adminToken) {
       return (
@@ -250,9 +302,7 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // =========================================================================
-  // 1. PUBLIC LANDING PAGE: Anyone opening URL sees StockMate Welcome Portal
-  // =========================================================================
+  // 1. PUBLIC LANDING PAGE
   if (!isAuthenticated || !currentUser) {
     return (
       <StockMateAuth
@@ -262,23 +312,28 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // =========================================================================
-  // 2. TEACHER DASHBOARD: Dedicated teacher view with strict role enforcement
-  // =========================================================================
+  // 2. TEACHER DASHBOARD
   if (currentUser.role === 'TEACHER') {
     return <SimpleTeacherDashboard />;
   }
 
-  // =========================================================================
-  // 3. STUDENT PORTAL: Redesigned gamified student learning & trading game
-  // =========================================================================
+  // 3. STUDENT PORTAL
   const renderActiveScreen = () => {
-    // If an interactive mission is in progress
     if (activeMissionId) {
       return <MissionRunner />;
     }
 
-    // If an arcade mini-game is in progress
+    // 8 Curriculum Stock-Market Educational Games
+    if (activeGame && EDUCATIONAL_GAME_IDS.has(activeGame)) {
+      return (
+        <StockMarketGameRunner
+          gameId={activeGame as EducationalGameId}
+          onExit={() => setActiveGame(null)}
+          onNavigateTab={handleSelectTab}
+        />
+      );
+    }
+
     switch (activeGame) {
       case 'price-prediction':
       case 'market-replay':
@@ -292,13 +347,9 @@ const AppContent: React.FC = () => {
         return <ChartDetective />;
       case 'market-crash':
         return <MarketCrashGame />;
-      case 'traderfi-arena':
-      case 'tournament-lobby':
-        return <TraderFiArenaGame />;
       case 'trading-terminal':
         return <TradingTerminal />;
       default:
-        // Render current student tab
         switch (currentTab) {
           case 'HOME':
             return (
@@ -311,12 +362,14 @@ const AppContent: React.FC = () => {
             return (
               <StudentLearnHub
                 onLaunchMission={(mId) => startMission(mId)}
+                onNavigateTab={handleSelectTab}
               />
             );
           case 'PLAY':
             return (
               <StudentPlayArcade
                 onSelectGame={(gId) => setActiveGame(gId)}
+                onNavigateTab={handleSelectTab}
               />
             );
           case 'TRADE':
@@ -350,20 +403,23 @@ const AppContent: React.FC = () => {
       />
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {renderActiveScreen()}
+        <ScreenErrorBoundary resetKey={`${currentTab}-${activeGame || ''}-${activeMissionId || ''}`}>
+          {renderActiveScreen()}
+        </ScreenErrorBoundary>
       </main>
 
-      {/* Global Modals */}
+      {/* Non-Blocking Compact Floating AI Mentor + Leaderboard Modal */}
+      <AIMentorModal />
       <LeaderboardModal />
 
       {/* Footer */}
       <footer className="border-t border-slate-900/80 bg-slate-950/90 py-5 text-center text-xs text-slate-400 mb-14 md:mb-0">
         <div className="max-w-7xl mx-auto px-4 space-y-1">
           <p className="font-bold text-slate-300 tracking-wide">
-            STOCKMATE — Gamified Financial Market Learning & Trading Arena
+            STOCKMATE — Indian Stock Market (NSE/BSE) Learning, Paper Trading &amp; Classroom System
           </p>
           <p className="text-[11px] text-slate-400">
-            Interactive candlestick mechanics, paper trading terminal, and classroom market challenges. All funds are simulated.
+            Educational simulator only. No investment advice or stock recommendations. All cash, equities, and F&amp;O positions are simulated.
           </p>
           <div className="pt-2">
             <button
@@ -383,10 +439,10 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <GameProvider>
-      <ClassroomProvider>
+    <ClassroomProvider>
+      <GameProvider>
         <AppContent />
-      </ClassroomProvider>
-    </GameProvider>
+      </GameProvider>
+    </ClassroomProvider>
   );
 }

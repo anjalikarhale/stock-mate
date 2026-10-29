@@ -13,7 +13,6 @@ import {
 } from '../types/classroom';
 import { classroomApi } from '../services/classroomApi';
 import { getSocket, joinClassroomRoom, joinActivityRoom } from '../services/socket';
-import { useGame } from './GameContext';
 
 interface ClassroomContextType {
   currentUser: ClassroomUser | null;
@@ -95,8 +94,6 @@ function loadInitialUser(): ClassroomUser | null {
 }
 
 export const ClassroomProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { profile, addXp } = useGame();
-
   const [currentUser, setCurrentUser] = useState<ClassroomUser | null>(() => loadInitialUser());
   const [studentProfile, setStudentProfile] = useState<StudentProfileData | null>(null);
   const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
@@ -140,12 +137,7 @@ export const ClassroomProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, []);
 
-  // Sync user with backend on init or change
-  useEffect(() => {
-    if (currentUser && currentUser.id) {
-      classroomApi.setUser(currentUser).catch(console.error);
-    }
-  }, [currentUser]);
+  // Session validation handled via /api/auth/me above; profile updates explicitly call classroomApi.setUser.
 
   // Load available sample users
   useEffect(() => {
@@ -636,8 +628,7 @@ export const ClassroomProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setHasSubmittedCurrentRound(true);
     setLeaderboard(res.leaderboard);
 
-    // Award XP to player profile!
-    addXp(Math.round(res.submission.totalScore / 2));
+    await refreshStudentProfile();
 
     return res;
   };

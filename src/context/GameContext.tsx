@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import {
   PlayerProfile,
@@ -7,21 +7,33 @@ import {
   StockQuote,
   Order,
   Position,
-  TradingJournalEntry,
+  OptionPosition,
+  OptionOrder,
+  CompanyWorksheetDraft,
+  GameScoreRecord,
+  ActiveMentorContext,
   MistakeEntry,
   MarketWeather,
   DailyQuest,
-  AppMode
+  AppMode,
 } from '../types';
 import { INITIAL_STOCKS } from '../data/marketData';
 import { PROGRESSION_LEVELS, INITIAL_DAILY_QUESTS } from '../data/curriculum';
 import { BEGINNER_MISSIONS } from '../data/missionsData';
 import { NCFM_LESSONS } from '../data/ncfmCourseData';
-import { loadSavedProfile, saveProfile, DEFAULT_PLAYER_PROFILE, clearAllLearningProgress } from '../utils/storage';
-import { soundEffects, isSoundEnabled, setSoundEnabled } from '../utils/audio';
+import {
+  loadSavedProfile,
+  saveProfile,
+  DEFAULT_PLAYER_PROFILE,
+  clearAllLearningProgress,
+} from '../utils/storage';
+import { soundEffects, setSoundEnabled } from '../utils/audio';
+import { useClassroom } from './ClassroomContext';
+import { marketApi, ServerStudentPortfolio } from '../services/marketApi';
 
 interface GameContextType {
   profile: PlayerProfile;
+  isHydratingServerState: boolean;
   activeGame: GameId | null;
   activeMissionId: string | null;
   selectedDistrict: DistrictId | null;
@@ -29,13 +41,23 @@ interface GameContextType {
   stocks: StockQuote[];
   dailyQuests: DailyQuest[];
   isAIMentorOpen: boolean;
+  isAIMentorMinimized: boolean;
+  setAIMentorMinimized: (minimized: boolean) => void;
   aiMentorInitialPrompt: string | null;
   openAIMentorWithPrompt: (prompt: string) => void;
   clearAIMentorInitialPrompt: () => void;
+  mentorContext: ActiveMentorContext;
+  updateMentorContext: (partial: Partial<ActiveMentorContext>) => void;
+  navigateTargetModuleId: string | null;
+  setNavigateTargetModuleId: (moduleId: string | null) => void;
+  navigateTargetTradeSymbol: string | null;
+  setNavigateTargetTradeSymbol: (symbol: string | null) => void;
   isProfileModalOpen: boolean;
   isLeaderboardOpen: boolean;
   soundOn: boolean;
   totalPortfolioValue: number;
+  totalOptionsUnrealizedPnL: number;
+  totalOptionsMarginBlocked: number;
   totalNetWorth: number;
   setActiveGame: (game: GameId | null) => void;
   setActiveMissionId: (missionId: string | null) => void;
@@ -45,24 +67,81 @@ interface GameContextType {
   setLeaderboardOpen: (open: boolean) => void;
   toggleSound: () => void;
   addXP: (amount: number, reason?: string) => void;
+  addXp: (amount: number, reason?: string) => void;
   addVirtualCash: (amount: number) => void;
   deductVirtualCash: (amount: number) => boolean;
   addTraderFiTokens: (amount: number) => void;
   spendTraderFiTokens: (amount: number) => boolean;
   recordTournamentResult: (won: boolean, profit: number, rank: number) => void;
   executeTrade: (order: Omit<Order, 'id' | 'timestamp' | 'status'>) => boolean;
-  recordMistake: (category: MistakeEntry['category'], description: string, financialLoss: number, tip: string) => void;
+  placeEquityOrder: (payload: {
+    symbol: string;
+    name?: string;
+    action: 'BUY' | 'SELL';
+    type?: 'MARKET' | 'LIMIT' | 'STOP_LOSS';
+    quantity: number;
+    price: number;
+    triggerPrice?: number;
+    stopLossPrice?: number;
+    rationale?: string;
+    emotionalState?: 'CALM' | 'FOMO' | 'FEARFUL' | 'GREEDY' | 'REVENGE';
+  }) => Promise<{ success: boolean; error?: string; order?: Order }>;
+  cancelEquityOrder: (orderId: string) => Promise<{ success: boolean; error?: string }>;
+  placeOptionOrder: (payload: {
+    underlying: string;
+    expiry: string;
+    strike: number;
+    optionType: 'CE' | 'PE';
+    action: 'BUY' | 'SELL';
+    lots: number;
+    rationale?: string;
+  }) => Promise<{ success: boolean; error?: string; order?: OptionOrder }>;
+  refreshPortfolioFromServer: () => Promise<void>;
+  recordMistake: (
+    category: MistakeEntry['category'],
+    description: string,
+    financialLoss: number,
+    tip: string
+  ) => void;
   completeDailyQuest: (questId: string) => void;
   updateStats: (statDeltas: Partial<PlayerProfile['stats']>) => void;
   resetProgress: () => void;
-  // Journey & Progressive Unlock Handlers
+  // Course & 16-Module Progression Handlers
   setAppMode: (mode: AppMode) => void;
   completeOnboarding: (data: { username: string; avatar: string; nickname?: string }) => void;
   startMission: (missionId: string) => void;
   completeMission: (missionId: string) => void;
   completeNcfmLesson: (lessonId: string, earnedXp: number) => void;
   completeCourseTopic: (topicId: string, earnedXp: number) => void;
-  resetLearningProgress: () => void;
+  recordLessonProgress: (params: {
+    moduleId: string;
+    lessonId: string;
+    earnedXp?: number;
+  }) => Promise<void>;
+  recordExerciseCompletion: (params: {
+    moduleId: string;
+    exerciseId: string;
+    earnedXp?: number;
+  }) => Promise<void>;
+  recordModuleAssessment: (params: {
+    moduleId: string;
+    scorePercent: number;
+    passed: boolean;
+    earnedXp?: number;
+  }) => Promise<void>;
+  setLastActiveCourseLocation: (moduleId: string, lessonId?: string) => void;
+  saveCompanyWorksheet: (draft: CompanyWorksheetDraft) => Promise<boolean>;
+  recordGameScore: (params: {
+    gameId: string;
+    gameTitle: string;
+    moduleId: string;
+    score: number;
+    maxPossibleScore: number;
+    difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+    completed: boolean;
+    xpReward?: number;
+  }) => Promise<void>;
+  resetLearningProgress: () => Promise<void>;
   toggleWatchlist: (symbol: string) => void;
   isNcfmLessonUnlocked: (lessonId: string) => boolean;
   skipTutorialWithDiagnostic: (scorePercent: number) => void;
@@ -73,21 +152,41 @@ interface GameContextType {
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [profile, setProfile] = useState<PlayerProfile>(loadSavedProfile);
+  const { currentUser, isAuthenticated } = useClassroom();
+  const activeUserId = isAuthenticated && currentUser?.id ? currentUser.id : null;
+
+  const [profile, setProfile] = useState<PlayerProfile>(() => loadSavedProfile(activeUserId));
+  const [isHydratingServerState, setIsHydratingServerState] = useState<boolean>(false);
   const [activeGame, setActiveGame] = useState<GameId | null>(null);
   const [activeMissionId, setActiveMissionId] = useState<string | null>(null);
   const [selectedDistrict, setSelectedDistrict] = useState<DistrictId | null>(null);
-  const [marketWeather, setMarketWeather] = useState<MarketWeather>('BULL');
+  const [marketWeather] = useState<MarketWeather>('BULL');
   const [stocks, setStocks] = useState<StockQuote[]>(INITIAL_STOCKS);
   const [dailyQuests, setDailyQuests] = useState<DailyQuest[]>(INITIAL_DAILY_QUESTS);
   const [isAIMentorOpen, setAIMentorOpen] = useState(false);
+  const [isAIMentorMinimized, setAIMentorMinimized] = useState(false);
   const [aiMentorInitialPrompt, setAiMentorInitialPrompt] = useState<string | null>(null);
+  const [mentorContext, setMentorContext] = useState<ActiveMentorContext>({
+    currentTab: 'HOME',
+    activeModuleId: 'module-1',
+    activeModuleTitle: 'Module 1: What Is the Stock Market?',
+    selectedSymbol: 'RELIANCE',
+    selectedTimeframe: '3M',
+    tradingMode: 'EQUITY',
+  });
+  const [navigateTargetModuleId, setNavigateTargetModuleId] = useState<string | null>(null);
+  const [navigateTargetTradeSymbol, setNavigateTargetTradeSymbol] = useState<string | null>(null);
   const [isProfileModalOpen, setProfileModalOpen] = useState(false);
   const [isLeaderboardOpen, setLeaderboardOpen] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
 
+  const updateMentorContext = useCallback((partial: Partial<ActiveMentorContext>) => {
+    setMentorContext((prev) => ({ ...prev, ...partial }));
+  }, []);
+
   const openAIMentorWithPrompt = (prompt: string) => {
     setAiMentorInitialPrompt(prompt);
+    setAIMentorMinimized(false);
     setAIMentorOpen(true);
   };
 
@@ -95,41 +194,191 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAiMentorInitialPrompt(null);
   };
 
-  // Auto-save on state change
-  useEffect(() => {
-    saveProfile(profile);
-  }, [profile]);
-
-  // Periodic subtle market fluctuations (Simulated live ticks)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setStocks(prevStocks =>
-        prevStocks.map(stock => {
-          const deltaPct = (Math.random() - 0.49) * 0.003;
-          const newPrice = Math.round((stock.price * (1 + deltaPct)) * 100) / 100;
-          const change = Math.round((newPrice - (stock.price - stock.change)) * 100) / 100;
-          const changePercent = Math.round(((change / (newPrice - change)) * 100) * 100) / 100;
-          return {
-            ...stock,
-            price: newPrice,
-            change,
-            changePercent,
-          };
-        })
-      );
-    }, 4000);
-    return () => clearInterval(interval);
+  const applyServerPortfolioToProfile = useCallback((serverPort: ServerStudentPortfolio) => {
+    setProfile((prev) => ({
+      ...prev,
+      virtualCash: serverPort.virtualCash,
+      positions: serverPort.positions || [],
+      orders: serverPort.orders || [],
+      optionPositions: serverPort.optionPositions || [],
+      optionOrders: serverPort.optionOrders || [],
+      watchlist: serverPort.watchlist || prev.watchlist || ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY'],
+      journal: serverPort.journal || prev.journal || [],
+    }));
   }, []);
 
-  // Calculate holdings value
-  const totalHoldingsValue = profile.positions.reduce((acc, pos) => {
-    const liveStock = stocks.find(s => s.symbol === pos.symbol);
+  const refreshPortfolioFromServer = useCallback(async () => {
+    if (!activeUserId) return;
+    try {
+      const serverPort = await marketApi.getStudentPortfolio();
+      if (serverPort) {
+        applyServerPortfolioToProfile(serverPort);
+      }
+    } catch (err) {
+      console.error('Failed to refresh student portfolio:', err);
+    }
+  }, [activeUserId, applyServerPortfolioToProfile]);
+
+  // Hydrate authenticated student state from backend on login / session restore / user switch
+  useEffect(() => {
+    if (!activeUserId || !currentUser) {
+      setProfile(DEFAULT_PLAYER_PROFILE);
+      setActiveGame(null);
+      setActiveMissionId(null);
+      return;
+    }
+
+    // Load scoped local snapshot immediately for snappy render, then overwrite with authoritative server state
+    const localSnapshot = loadSavedProfile(activeUserId);
+    setProfile({
+      ...localSnapshot,
+      id: currentUser.id,
+      username: currentUser.name || localSnapshot.username,
+      avatar: currentUser.avatar || localSnapshot.avatar,
+      xp: currentUser.xp ?? localSnapshot.xp,
+      level: currentUser.level ?? localSnapshot.level,
+    });
+
+    if (currentUser.role !== 'STUDENT') {
+      return;
+    }
+
+    let cancelled = false;
+    setIsHydratingServerState(true);
+
+    Promise.all([
+      marketApi.getStudentPortfolio(),
+      marketApi.getCourseProgress(),
+      marketApi.getGameScores(),
+    ])
+      .then(([serverPort, serverCourse, serverGames]) => {
+        if (cancelled) return;
+        setProfile((prev) => {
+          const completedLessons = serverCourse?.completedLessons || prev.completedLessons || [];
+          const completedModules = serverCourse?.completedModules || prev.completedModules || [];
+          const completedExercises = serverCourse?.completedExercises || prev.completedExercises || [];
+          const moduleQuizScores = serverCourse?.moduleQuizScores || prev.moduleQuizScores || {};
+          const gameScoresMap: Record<string, GameScoreRecord> =
+            serverGames?.scores || prev.gameScores || {};
+
+          return {
+            ...prev,
+            id: currentUser.id,
+            username: currentUser.name || prev.username,
+            avatar: currentUser.avatar || prev.avatar,
+            xp: Math.max(prev.xp, currentUser.xp || 0),
+            level: Math.max(prev.level, currentUser.level || 1),
+            virtualCash: serverPort ? serverPort.virtualCash : prev.virtualCash,
+            positions: serverPort ? serverPort.positions || [] : prev.positions,
+            orders: serverPort ? serverPort.orders || [] : prev.orders,
+            optionPositions: serverPort ? serverPort.optionPositions || [] : prev.optionPositions,
+            optionOrders: serverPort ? serverPort.optionOrders || [] : prev.optionOrders,
+            watchlist: serverPort?.watchlist || prev.watchlist || ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY'],
+            journal: serverPort?.journal || prev.journal || [],
+            completedLessons,
+            completedCourseTopics: completedLessons,
+            completedModules,
+            completedExercises,
+            moduleQuizScores,
+            lastActiveModuleId:
+              serverCourse?.lastActiveModuleId || prev.lastActiveModuleId || 'module-1',
+            lastActiveLessonId:
+              serverCourse?.lastActiveLessonId || prev.lastActiveLessonId || 'm1-lesson-1',
+            streakDays: serverCourse?.streakDays || prev.streakDays || 1,
+            worksheetDraft: serverCourse?.worksheetDraft || prev.worksheetDraft,
+            gameScores: gameScoresMap,
+          };
+        });
+      })
+      .catch((err) => {
+        console.error('Error hydrating student state from backend:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsHydratingServerState(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeUserId, currentUser?.id, currentUser?.role, currentUser?.name, currentUser?.avatar]);
+
+  // Save per-user local cache whenever profile updates while logged in
+  useEffect(() => {
+    if (activeUserId) {
+      saveProfile(profile, activeUserId);
+    }
+  }, [profile, activeUserId]);
+
+  // Fetch real/cached batch prices periodically from backend instead of local random fake ticks
+  useEffect(() => {
+    if (!activeUserId) return;
+    let cancelled = false;
+
+    const syncQuotes = async () => {
+      try {
+        const exchangeSymbols = INITIAL_STOCKS.map((s) => `${s.exchange}_${s.symbol}`);
+        const res = await marketApi.getBatchLtp('CASH', exchangeSymbols);
+        if (cancelled || !res.success || !res.data) return;
+
+        setStocks((prevStocks) =>
+          prevStocks.map((st) => {
+            const key = `${st.exchange}_${st.symbol}`;
+            const ltp = res.data[key];
+            if (typeof ltp === 'number' && ltp > 0) {
+              const prevClose = st.price - st.change || st.price;
+              const change = Math.round((ltp - prevClose) * 100) / 100;
+              const changePercent =
+                prevClose > 0 ? Math.round(((change / prevClose) * 100) * 100) / 100 : 0;
+              return {
+                ...st,
+                price: ltp,
+                change,
+                changePercent,
+              };
+            }
+            return st;
+          })
+        );
+      } catch {
+        // Silent fallback if offline
+      }
+    };
+
+    syncQuotes();
+    const timer = setInterval(syncQuotes, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [activeUserId]);
+
+  // Calculate equity holdings value safely
+  const totalHoldingsValue = (profile.positions || []).reduce((acc, pos) => {
+    const liveStock = stocks.find((s) => s.symbol === pos.symbol);
     const price = liveStock ? liveStock.price : pos.currentPrice;
     return acc + pos.quantity * price;
   }, 0);
 
-  const totalPortfolioValue = totalHoldingsValue;
-  const totalNetWorth = profile.virtualCash + totalHoldingsValue;
+  // Calculate open index options metrics
+  const optionPositions: OptionPosition[] = profile.optionPositions || [];
+  const totalOptionsUnrealizedPnL = optionPositions.reduce(
+    (sum, opt) => sum + (opt.unrealizedPnL || 0),
+    0
+  );
+  const totalOptionsMarginBlocked = optionPositions.reduce(
+    (sum, opt) => sum + (opt.marginBlocked || 0),
+    0
+  );
+  const longOptionsLiquidationValue = optionPositions
+    .filter((o) => o.side === 'LONG')
+    .reduce((sum, o) => sum + o.currentPrice * o.quantity, 0);
+  const shortOptionsEquityValue = optionPositions
+    .filter((o) => o.side === 'SHORT')
+    .reduce((sum, o) => sum + o.marginBlocked + o.unrealizedPnL, 0);
+
+  const totalPortfolioValue =
+    totalHoldingsValue + longOptionsLiquidationValue + shortOptionsEquityValue;
+  const totalNetWorth = profile.virtualCash + totalPortfolioValue;
 
   const toggleSound = () => {
     const next = !soundOn;
@@ -138,23 +387,23 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (next) soundEffects.click();
   };
 
-  const addXP = (amount: number, _reason?: string) => {
-    setProfile(prev => {
+  const addXP = useCallback((amount: number, _reason?: string) => {
+    setProfile((prev) => {
       const newXp = prev.xp + amount;
       let newLevel = prev.level;
-      
-      const currentLevelDef = PROGRESSION_LEVELS.find(l => l.level === prev.level);
+
+      const currentLevelDef = PROGRESSION_LEVELS.find((l) => l.level === prev.level);
       if (currentLevelDef && newXp >= currentLevelDef.maxXp && prev.level < 11) {
         newLevel = prev.level + 1;
         soundEffects.levelUp();
         try {
           confetti({
-            particleCount: 140,
-            spread: 90,
-            origin: { y: 0.5 }
+            particleCount: 120,
+            spread: 85,
+            origin: { y: 0.5 },
           });
         } catch {}
-      } else {
+      } else if (amount > 0) {
         soundEffects.correct();
       }
 
@@ -164,11 +413,11 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         level: newLevel,
       };
     });
-  };
+  }, []);
 
   const addVirtualCash = (amount: number) => {
     soundEffects.cashTrade();
-    setProfile(prev => ({
+    setProfile((prev) => ({
       ...prev,
       virtualCash: prev.virtualCash + amount,
     }));
@@ -179,7 +428,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       soundEffects.wrong();
       return false;
     }
-    setProfile(prev => ({
+    setProfile((prev) => ({
       ...prev,
       virtualCash: prev.virtualCash - amount,
     }));
@@ -188,7 +437,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addTraderFiTokens = (amount: number) => {
     soundEffects.levelUp();
-    setProfile(prev => ({
+    setProfile((prev) => ({
       ...prev,
       traderFiTokens: (prev.traderFiTokens ?? 100) + amount,
     }));
@@ -200,7 +449,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return false;
     }
     soundEffects.cashTrade();
-    setProfile(prev => ({
+    setProfile((prev) => ({
       ...prev,
       traderFiTokens: Math.max(0, (prev.traderFiTokens ?? 100) - amount),
     }));
@@ -208,27 +457,171 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const recordTournamentResult = (won: boolean, _profit: number, _rank: number) => {
-    setProfile(prev => ({
+    setProfile((prev) => ({
       ...prev,
       tournamentsPlayed: (prev.tournamentsPlayed ?? 0) + 1,
-      tournamentsWon: won ? (prev.tournamentsWon ?? 0) + 1 : (prev.tournamentsWon ?? 0),
+      tournamentsWon: won ? (prev.tournamentsWon ?? 0) + 1 : prev.tournamentsWon ?? 0,
     }));
   };
 
-  const executeTrade = (orderParams: Omit<Order, 'id' | 'timestamp' | 'status'>): boolean => {
-    const totalCost = orderParams.quantity * orderParams.price;
+  // Server-persisted Equity Order execution
+  const placeEquityOrder = useCallback(
+    async (payload: {
+      symbol: string;
+      name?: string;
+      action: 'BUY' | 'SELL';
+      type?: 'MARKET' | 'LIMIT' | 'STOP_LOSS';
+      quantity: number;
+      price: number;
+      triggerPrice?: number;
+      stopLossPrice?: number;
+        rationale?: string;
+        emotionalState?: 'CALM' | 'FOMO' | 'FEARFUL' | 'GREEDY' | 'REVENGE';
+      }): Promise<{ success: boolean; error?: string; order?: Order }> => {
+        if (activeUserId) {
+          const res = await marketApi.submitEquityOrder({
+            symbol: payload.symbol,
+            action: payload.action,
+            type: payload.type || 'MARKET',
+            quantity: payload.quantity,
+            price: payload.price,
+            triggerPrice: payload.triggerPrice,
+            stopLossPrice: payload.stopLossPrice,
+            rationale: payload.rationale,
+            emotionalState: payload.emotionalState,
+          });
+          if (!res.success) {
+            soundEffects.wrong();
+            return { success: false, error: res.error || 'Order rejected by trading engine.' };
+          }
+          if (res.portfolio) {
+            applyServerPortfolioToProfile(res.portfolio);
+          }
+          soundEffects.cashTrade();
+          addXP(25, 'Equity Paper Order Executed');
+          return { success: true, order: res.order };
+        }
 
+        // Unauthenticated local fallback
+        const ok = executeTrade({
+          symbol: payload.symbol,
+          name: payload.name || payload.symbol,
+          action: payload.action,
+          type: payload.type || 'MARKET',
+          quantity: payload.quantity,
+          price: payload.price,
+          stopLossPrice: payload.stopLossPrice,
+          rationale: payload.rationale,
+          emotionalState: payload.emotionalState,
+        });
+        return ok
+          ? {
+              success: true,
+              order: {
+                id: `ord-local-${Date.now()}`,
+                symbol: payload.symbol,
+                name: payload.name || payload.symbol,
+                action: payload.action,
+                type: payload.type || 'MARKET',
+                quantity: payload.quantity,
+                price: payload.price,
+                executionPrice: payload.price,
+                status: 'EXECUTED',
+                timestamp: new Date().toISOString(),
+              },
+            }
+          : { success: false, error: 'Insufficient cash or holdings.' };
+      },
+      [activeUserId, applyServerPortfolioToProfile, addXP]
+    );
+
+    const cancelEquityOrder = useCallback(
+      async (orderId: string): Promise<{ success: boolean; error?: string }> => {
+        if (!activeUserId) {
+          setProfile((prev) => ({
+            ...prev,
+            orders: (prev.orders || []).map((o) =>
+              o.id === orderId ? { ...o, status: 'CANCELLED' } : o
+            ),
+          }));
+          return { success: true };
+        }
+        const res = await marketApi.cancelEquityOrder(orderId);
+        if (!res.success) {
+          soundEffects.wrong();
+          return { success: false, error: res.error || 'Unable to cancel order.' };
+        }
+        if (res.portfolio) {
+          applyServerPortfolioToProfile(res.portfolio);
+        }
+        soundEffects.click();
+        return { success: true };
+      },
+      [activeUserId, applyServerPortfolioToProfile]
+    );
+
+  // Server-persisted Index Options Order execution
+  const placeOptionOrder = useCallback(
+    async (payload: {
+      underlying: string;
+      expiry: string;
+      strike: number;
+      optionType: 'CE' | 'PE';
+      action: 'BUY' | 'SELL';
+      lots: number;
+      rationale?: string;
+    }): Promise<{ success: boolean; error?: string; order?: OptionOrder }> => {
+      const res = await marketApi.submitOptionOrder(payload);
+      if (!res.success) {
+        soundEffects.wrong();
+        return { success: false, error: res.error || 'Option order rejected.' };
+      }
+      if (res.portfolio) {
+        applyServerPortfolioToProfile(res.portfolio);
+      }
+      soundEffects.cashTrade();
+      addXP(35, 'Index Option Paper Order Executed');
+      return { success: true, order: res.order };
+    },
+    [applyServerPortfolioToProfile, addXP]
+  );
+
+  // Synchronous compatibility wrapper (triggers server persistence when logged in)
+  const executeTrade = (orderParams: Omit<Order, 'id' | 'timestamp' | 'status'>): boolean => {
+    if (activeUserId) {
+      marketApi
+        .submitEquityOrder({
+          symbol: orderParams.symbol,
+          action: orderParams.action,
+          type:
+            orderParams.type === 'STOP_LIMIT'
+              ? 'STOP_LOSS'
+              : (orderParams.type as 'MARKET' | 'LIMIT' | 'STOP_LOSS'),
+          quantity: orderParams.quantity,
+          price: orderParams.price,
+          stopLossPrice: orderParams.stopLossPrice,
+          rationale: orderParams.rationale,
+          emotionalState: orderParams.emotionalState,
+        })
+        .then((res) => {
+          if (res.success && res.portfolio) {
+            applyServerPortfolioToProfile(res.portfolio);
+          }
+        })
+        .catch(console.error);
+    }
+
+    const totalCost = orderParams.quantity * orderParams.price;
     if (orderParams.action === 'BUY') {
       if (profile.virtualCash < totalCost) {
         soundEffects.wrong();
         return false;
       }
-
       soundEffects.cashTrade();
-      setProfile(prev => {
+      setProfile((prev) => {
         const remainingCash = prev.virtualCash - totalCost;
-        const existingPosIndex = prev.positions.findIndex(p => p.symbol === orderParams.symbol);
-        let updatedPositions = [...prev.positions];
+        const existingPosIndex = prev.positions.findIndex((p) => p.symbol === orderParams.symbol);
+        const updatedPositions: Position[] = [...prev.positions];
 
         if (existingPosIndex >= 0) {
           const existing = updatedPositions[existingPosIndex];
@@ -264,51 +657,31 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           executionPrice: orderParams.price,
         };
 
-        const newJournalEntry: TradingJournalEntry = {
-          id: `jnl-${Date.now()}`,
-          orderId: newOrder.id,
-          timestamp: newOrder.timestamp,
-          symbol: orderParams.symbol,
-          action: 'BUY',
-          price: orderParams.price,
-          quantity: orderParams.quantity,
-          strategy: orderParams.rationale || 'Market Execution',
-          reason: orderParams.rationale || 'Technical / Fundamental setup',
-          emotionalState: orderParams.emotionalState || 'CALM',
-        };
-
         return {
           ...prev,
           virtualCash: remainingCash,
           positions: updatedPositions,
           orders: [newOrder, ...prev.orders],
-          journal: [newJournalEntry, ...prev.journal],
         };
       });
-
       addXP(25, 'Virtual Trade Executed');
       return true;
     } else {
-      // SELL ACTION
-      const existingPos = profile.positions.find(p => p.symbol === orderParams.symbol);
+      const existingPos = profile.positions.find((p) => p.symbol === orderParams.symbol);
       if (!existingPos || existingPos.quantity < orderParams.quantity) {
         soundEffects.wrong();
         return false;
       }
-
       soundEffects.cashTrade();
       const proceeds = orderParams.quantity * orderParams.price;
-      const costBasis = orderParams.quantity * existingPos.averageBuyPrice;
-      const realizedPnL = proceeds - costBasis;
-
-      setProfile(prev => {
+      setProfile((prev) => {
         let updatedPositions = [...prev.positions];
-        const idx = updatedPositions.findIndex(p => p.symbol === orderParams.symbol);
+        const idx = updatedPositions.findIndex((p) => p.symbol === orderParams.symbol);
         if (idx >= 0) {
           const current = updatedPositions[idx];
           const newQty = current.quantity - orderParams.quantity;
           if (newQty <= 0) {
-            updatedPositions = updatedPositions.filter(p => p.symbol !== orderParams.symbol);
+            updatedPositions = updatedPositions.filter((p) => p.symbol !== orderParams.symbol);
           } else {
             updatedPositions[idx] = {
               ...current,
@@ -318,7 +691,6 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
           }
         }
-
         const newOrder: Order = {
           ...orderParams,
           id: `ord-${Date.now()}`,
@@ -326,31 +698,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           status: 'EXECUTED',
           executionPrice: orderParams.price,
         };
-
-        const newJournalEntry: TradingJournalEntry = {
-          id: `jnl-${Date.now()}`,
-          orderId: newOrder.id,
-          timestamp: newOrder.timestamp,
-          symbol: orderParams.symbol,
-          action: 'SELL',
-          price: orderParams.price,
-          quantity: orderParams.quantity,
-          strategy: orderParams.rationale || 'Profit Taking / Stop Exit',
-          reason: orderParams.rationale || 'Target hit or risk control',
-          emotionalState: orderParams.emotionalState || 'CALM',
-          pnl: Math.round(realizedPnL * 100) / 100,
-          lessonLearned: realizedPnL >= 0 ? 'Good discipline on taking profits.' : 'Respecting stop loss preserved capital.',
-        };
-
         return {
           ...prev,
           virtualCash: prev.virtualCash + proceeds,
           positions: updatedPositions,
           orders: [newOrder, ...prev.orders],
-          journal: [newJournalEntry, ...prev.journal],
         };
       });
-
       addXP(30, 'Sell Order Completed');
       return true;
     }
@@ -362,46 +716,40 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     financialLoss: number,
     tip: string
   ) => {
-    setProfile(prev => {
-      const existing = prev.mistakes.find(m => m.category === category);
-      let updatedMistakes: MistakeEntry[];
-      if (existing) {
-        updatedMistakes = prev.mistakes.map(m =>
-          m.category === category
-            ? {
-                ...m,
-                count: m.count + 1,
-                lastOccurred: new Date().toISOString(),
-                financialImpactVirtual: m.financialImpactVirtual + financialLoss,
-                description,
-                remedyTip: tip,
-              }
-            : m
-        );
-      } else {
-        updatedMistakes = [
-          ...prev.mistakes,
-          {
-            id: `mst-${Date.now()}`,
-            category,
-            count: 1,
-            lastOccurred: new Date().toISOString(),
-            description,
-            financialImpactVirtual: financialLoss,
-            remedyTip: tip,
-          }
-        ];
-      }
-      return {
-        ...prev,
-        mistakes: updatedMistakes,
-      };
+    setProfile((prev) => {
+      const existing = prev.mistakes.find((m) => m.category === category);
+      const updatedMistakes: MistakeEntry[] = existing
+        ? prev.mistakes.map((m) =>
+            m.category === category
+              ? {
+                  ...m,
+                  count: m.count + 1,
+                  lastOccurred: new Date().toISOString(),
+                  financialImpactVirtual: m.financialImpactVirtual + financialLoss,
+                  description,
+                  remedyTip: tip,
+                }
+              : m
+          )
+        : [
+            ...prev.mistakes,
+            {
+              id: `mst-${Date.now()}`,
+              category,
+              count: 1,
+              lastOccurred: new Date().toISOString(),
+              description,
+              financialImpactVirtual: financialLoss,
+              remedyTip: tip,
+            },
+          ];
+      return { ...prev, mistakes: updatedMistakes };
     });
   };
 
   const completeDailyQuest = (questId: string) => {
-    setDailyQuests(prev =>
-      prev.map(q => {
+    setDailyQuests((prev) =>
+      prev.map((q) => {
         if (q.id === questId && !q.completed) {
           addXP(q.xpReward);
           addVirtualCash(q.cashReward);
@@ -413,145 +761,91 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateStats = (statDeltas: Partial<PlayerProfile['stats']>) => {
-    setProfile(prev => {
+    setProfile((prev) => {
       const newStats = { ...prev.stats };
-      Object.keys(statDeltas).forEach(key => {
+      Object.keys(statDeltas).forEach((key) => {
         const k = key as keyof PlayerProfile['stats'];
         newStats[k] = Math.min(100, Math.max(0, (newStats[k] || 0) + (statDeltas[k] || 0)));
       });
-      return {
-        ...prev,
-        stats: newStats,
-      };
+      return { ...prev, stats: newStats };
     });
   };
 
   const resetProgress = () => {
     setProfile(DEFAULT_PLAYER_PROFILE);
-    saveProfile(DEFAULT_PLAYER_PROFILE);
+    saveProfile(DEFAULT_PLAYER_PROFILE, activeUserId);
     setActiveGame(null);
     setActiveMissionId(null);
     soundEffects.click();
   };
 
-  // --- JOURNEY MODE & PROGRESSIVE UNLOCK FUNCTIONS ---
-
   const setAppMode = (mode: AppMode) => {
     soundEffects.click();
-    setProfile(prev => ({
+    setProfile((prev) => ({
       ...prev,
       appMode: mode,
     }));
+    updateMentorContext({ currentTab: mode });
   };
 
   const completeOnboarding = (data: { username: string; avatar: string; nickname?: string }) => {
     soundEffects.levelUp();
-    setProfile(prev => ({
+    setProfile((prev) => ({
       ...prev,
       username: data.username.trim() || 'MarketExplorer',
       avatar: data.avatar || '🦁',
       nickname: data.nickname?.trim() || 'Rookie Trader',
       hasCompletedOnboarding: true,
-      appMode: 'JOURNEY',
-      currentMissionId: 'mission-1',
-      unlockedFeatures: ['Stock Basics', 'mission-1'],
+      appMode: 'HOME',
     }));
   };
 
   const startMission = (missionId: string) => {
     soundEffects.click();
     setActiveMissionId(missionId);
-    setActiveGame(null); // Return from mini-game if in progress
+    setActiveGame(null);
   };
 
   const completeMission = (missionId: string) => {
-    const mission = BEGINNER_MISSIONS.find(m => m.id === missionId);
+    const mission = BEGINNER_MISSIONS.find((m) => m.id === missionId);
     if (!mission) return;
-
     soundEffects.levelUp();
-    try {
-      confetti({
-        particleCount: 150,
-        spread: 80,
-        origin: { y: 0.6 }
-      });
-    } catch {}
-
-    const missionIndex = BEGINNER_MISSIONS.findIndex(m => m.id === missionId);
-    const nextMission = BEGINNER_MISSIONS[missionIndex + 1];
-
-    setProfile(prev => {
+    setProfile((prev) => {
       const alreadyCompleted = prev.completedMissions.includes(missionId);
-      const updatedCompleted = alreadyCompleted ? prev.completedMissions : [...prev.completedMissions, missionId];
-      const updatedUnlocked = [...prev.unlockedFeatures];
-
-      if (mission.unlockedFeatureName && !updatedUnlocked.includes(mission.unlockedFeatureName)) {
-        updatedUnlocked.push(mission.unlockedFeatureName);
-      }
-
-      if (nextMission && !updatedUnlocked.includes(nextMission.id)) {
-        updatedUnlocked.push(nextMission.id);
-      }
-
-      // If all 10 missions completed, unlock Free Mode fully
-      if (updatedCompleted.length >= 10 && !updatedUnlocked.includes('Free Mode')) {
-        updatedUnlocked.push('Free Mode');
-      }
-
-      // Update skill stats based on mission category
-      const statBonus: Partial<PlayerProfile['stats']> = {};
-      if (mission.category === 'INVESTING_BASICS') statBonus.knowledgeScore = 15;
-      if (mission.category === 'STOCKS') statBonus.fundamentalAnalysisScore = 15;
-      if (mission.category === 'DEMAND_SUPPLY') statBonus.tradingDisciplineScore = 15;
-      if (mission.category === 'TRADING') statBonus.tradingDisciplineScore = 20;
-      if (mission.category === 'PORTFOLIO') statBonus.portfolioScore = 20;
-      if (mission.category === 'RISK') statBonus.riskManagementScore = 25;
-      if (mission.category === 'VOLATILITY') statBonus.psychologyScore = 20;
-      if (mission.category === 'CHARTS') statBonus.technicalAnalysisScore = 20;
-      if (mission.category === 'CANDLESTICKS') statBonus.technicalAnalysisScore = 30;
-      if (mission.category === 'SUPPORT_RESISTANCE') statBonus.technicalAnalysisScore = 35;
-
-      const newStats = { ...prev.stats };
-      Object.keys(statBonus).forEach(k => {
-        const key = k as keyof PlayerProfile['stats'];
-        newStats[key] = Math.min(100, (newStats[key] || 0) + (statBonus[key] || 0));
-      });
-
+      const updatedCompleted = alreadyCompleted
+        ? prev.completedMissions
+        : [...prev.completedMissions, missionId];
       return {
         ...prev,
         xp: prev.xp + mission.xpReward,
         virtualCash: prev.virtualCash + mission.cashReward,
         completedMissions: updatedCompleted,
-        currentMissionId: nextMission ? nextMission.id : 'mission-10',
-        unlockedFeatures: updatedUnlocked,
-        stats: newStats,
       };
     });
   };
 
   const isNcfmLessonUnlocked = (lessonId: string): boolean => {
-    const lesson = NCFM_LESSONS.find(l => l.id === lessonId);
+    const lesson = NCFM_LESSONS.find((l) => l.id === lessonId);
     if (!lesson) return false;
     if (lesson.prerequisites.length === 0) return true;
     const completed = profile.completedNcfmLessons || [];
-    return lesson.prerequisites.every(pId => completed.includes(pId));
+    return lesson.prerequisites.every((pId) => completed.includes(pId));
   };
 
   const completeNcfmLesson = (lessonId: string, earnedXp: number) => {
-    setProfile(prev => {
+    setProfile((prev) => {
       const alreadyCompleted = (prev.completedNcfmLessons || []).includes(lessonId);
       if (alreadyCompleted) return prev;
-      const updated = [...(prev.completedNcfmLessons || []), lessonId];
       return {
         ...prev,
         xp: prev.xp + earnedXp,
-        completedNcfmLessons: updated,
+        completedNcfmLessons: [...(prev.completedNcfmLessons || []), lessonId],
       };
     });
   };
 
   const completeCourseTopic = (topicId: string, earnedXp: number) => {
-    setProfile(prev => {
+    setProfile((prev) => {
       const alreadyCompleted = (prev.completedCourseTopics || []).includes(topicId);
       if (alreadyCompleted) return prev;
       const updated = [...(prev.completedCourseTopics || []), topicId];
@@ -559,38 +853,278 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...prev,
         xp: prev.xp + earnedXp,
         completedCourseTopics: updated,
+        completedLessons: Array.from(new Set([...(prev.completedLessons || []), topicId])),
       };
     });
+    if (activeUserId) {
+      marketApi
+        .saveCourseProgress({ lessonId: topicId, score: 100, earnedXp })
+        .catch(console.error);
+    }
     soundEffects.correct();
-    try {
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
-    } catch {}
   };
 
-  const resetLearningProgress = () => {
-    clearAllLearningProgress();
-    setProfile(prev => ({
+  // 16-Module Lesson Completion (Server-Persisted)
+  const recordLessonProgress = useCallback(
+    async (params: { moduleId: string; lessonId: string; earnedXp?: number }) => {
+      const xpToAward = params.earnedXp ?? 25;
+      let isNew = false;
+
+      setProfile((prev) => {
+        const existingLessons = prev.completedLessons || [];
+        isNew = !existingLessons.includes(params.lessonId);
+        const nextLessons = isNew ? [...existingLessons, params.lessonId] : existingLessons;
+        return {
+          ...prev,
+          completedLessons: nextLessons,
+          completedCourseTopics: nextLessons,
+          lastActiveModuleId: params.moduleId,
+          lastActiveLessonId: params.lessonId,
+          xp: isNew ? prev.xp + xpToAward : prev.xp,
+        };
+      });
+
+      if (isNew) {
+        soundEffects.correct();
+      }
+
+      if (activeUserId) {
+        const res = await marketApi.saveCourseProgress({
+          moduleId: params.moduleId,
+          lessonId: params.lessonId,
+          earnedXp: isNew ? xpToAward : 0,
+          lastActiveModuleId: params.moduleId,
+          lastActiveLessonId: params.lessonId,
+        });
+        if (res.success && res.progress) {
+          setProfile((prev) => ({
+            ...prev,
+            completedLessons: res.progress!.completedLessons || prev.completedLessons,
+            completedModules: res.progress!.completedModules || prev.completedModules,
+            completedExercises: res.progress!.completedExercises || prev.completedExercises,
+            streakDays: res.progress!.streakDays || prev.streakDays,
+          }));
+        }
+      }
+    },
+    [activeUserId]
+  );
+
+  // 16-Module Interactive Exercise Completion (Server-Persisted)
+  const recordExerciseCompletion = useCallback(
+    async (params: { moduleId: string; exerciseId: string; earnedXp?: number }) => {
+      const xpToAward = params.earnedXp ?? 35;
+      let isNew = false;
+
+      setProfile((prev) => {
+        const existing = prev.completedExercises || [];
+        isNew = !existing.includes(params.exerciseId);
+        return {
+          ...prev,
+          completedExercises: isNew ? [...existing, params.exerciseId] : existing,
+          lastActiveModuleId: params.moduleId,
+          xp: isNew ? prev.xp + xpToAward : prev.xp,
+        };
+      });
+
+      if (isNew) {
+        soundEffects.correct();
+      }
+
+      if (activeUserId) {
+        const res = await marketApi.saveCourseProgress({
+          moduleId: params.moduleId,
+          exerciseId: params.exerciseId,
+          earnedXp: isNew ? xpToAward : 0,
+          lastActiveModuleId: params.moduleId,
+        });
+        if (res.success && res.progress) {
+          setProfile((prev) => ({
+            ...prev,
+            completedExercises: res.progress!.completedExercises || prev.completedExercises,
+          }));
+        }
+      }
+    },
+    [activeUserId]
+  );
+
+  // 16-Module Assessment & Module Completion (Server-Persisted)
+  const recordModuleAssessment = useCallback(
+    async (params: {
+      moduleId: string;
+      scorePercent: number;
+      passed: boolean;
+      earnedXp?: number;
+    }) => {
+      const xpToAward = params.passed ? params.earnedXp ?? 120 : 15;
+      let newlyCompletedModule = false;
+
+      setProfile((prev) => {
+        const existingModules = prev.completedModules || [];
+        newlyCompletedModule = params.passed && !existingModules.includes(params.moduleId);
+        const nextModules = newlyCompletedModule
+          ? [...existingModules, params.moduleId]
+          : existingModules;
+        const prevBest = (prev.moduleQuizScores || {})[params.moduleId] ?? 0;
+
+        return {
+          ...prev,
+          completedModules: nextModules,
+          moduleQuizScores: {
+            ...(prev.moduleQuizScores || {}),
+            [params.moduleId]: Math.max(prevBest, params.scorePercent),
+          },
+          lastActiveModuleId: params.moduleId,
+          xp: newlyCompletedModule ? prev.xp + xpToAward : prev.xp,
+        };
+      });
+
+      if (newlyCompletedModule) {
+        soundEffects.levelUp();
+        try {
+          confetti({ particleCount: 90, spread: 75, origin: { y: 0.6 } });
+        } catch {}
+      } else if (params.passed) {
+        soundEffects.correct();
+      }
+
+      if (activeUserId) {
+        const res = await marketApi.saveCourseProgress({
+          moduleId: params.moduleId,
+          moduleCompleted: params.passed,
+          moduleQuizScore: params.scorePercent,
+          earnedXp: newlyCompletedModule ? xpToAward : 0,
+          lastActiveModuleId: params.moduleId,
+        });
+        if (res.success && res.progress) {
+          setProfile((prev) => ({
+            ...prev,
+            completedModules: res.progress!.completedModules || prev.completedModules,
+            moduleQuizScores: res.progress!.moduleQuizScores || prev.moduleQuizScores,
+            streakDays: res.progress!.streakDays || prev.streakDays,
+          }));
+        }
+      }
+    },
+    [activeUserId]
+  );
+
+  const setLastActiveCourseLocation = useCallback(
+    (moduleId: string, lessonId?: string) => {
+      setProfile((prev) => ({
+        ...prev,
+        lastActiveModuleId: moduleId,
+        lastActiveLessonId: lessonId || prev.lastActiveLessonId,
+      }));
+      if (activeUserId) {
+        marketApi
+          .saveCourseProgress({
+            lastActiveModuleId: moduleId,
+            lastActiveLessonId: lessonId,
+          })
+          .catch(() => {});
+      }
+    },
+    [activeUserId]
+  );
+
+  const saveCompanyWorksheet = useCallback(
+    async (draft: CompanyWorksheetDraft): Promise<boolean> => {
+      setProfile((prev) => ({
+        ...prev,
+        worksheetDraft: draft,
+      }));
+      if (!activeUserId) return true;
+      const res = await marketApi.saveCourseProgress({
+        worksheetDraft: draft,
+      });
+      return res.success;
+    },
+    [activeUserId]
+  );
+
+  const recordGameScore = useCallback(
+    async (params: {
+      gameId: string;
+      gameTitle: string;
+      moduleId: string;
+      score: number;
+      maxPossibleScore: number;
+      difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+      completed: boolean;
+      xpReward?: number;
+    }) => {
+      const xpToAward = params.completed ? params.xpReward ?? 80 : 25;
+      addXP(xpToAward, `Completed ${params.gameTitle}`);
+
+      setProfile((prev) => {
+        const prevMap = prev.gameScores || {};
+        const existing = prevMap[params.gameId];
+        const nextEntry: GameScoreRecord = {
+          gameId: params.gameId,
+          gameTitle: params.gameTitle,
+          moduleId: params.moduleId,
+          bestScore: existing ? Math.max(existing.bestScore, params.score) : params.score,
+          lastScore: params.score,
+          maxPossibleScore: params.maxPossibleScore,
+          bestDifficulty: params.difficulty,
+          attemptsCount: (existing?.attemptsCount || 0) + 1,
+          completed: Boolean(existing?.completed || params.completed),
+          lastPlayedAt: new Date().toISOString(),
+        };
+        return {
+          ...prev,
+          gameScores: {
+            ...prevMap,
+            [params.gameId]: nextEntry,
+          },
+        };
+      });
+
+      if (activeUserId) {
+        const res = await marketApi.saveGameScore(params);
+        if (res.success && res.allScores) {
+          setProfile((prev) => ({
+            ...prev,
+            gameScores: res.allScores!.scores,
+          }));
+        }
+      }
+    },
+    [activeUserId, addXP]
+  );
+
+  const resetLearningProgress = async () => {
+    clearAllLearningProgress(activeUserId);
+    if (activeUserId) {
+      await marketApi.resetCourseProgress();
+    }
+    setProfile((prev) => ({
       ...prev,
       completedCourseTopics: [],
+      completedModules: [],
+      completedLessons: [],
+      completedExercises: [],
+      moduleQuizScores: {},
+      lastActiveModuleId: 'module-1',
+      lastActiveLessonId: 'm1-lesson-1',
       completedMissions: [],
       completedNcfmLessons: [],
-      xp: 0,
-      level: 1,
     }));
     soundEffects.click();
   };
 
   const toggleWatchlist = (symbol: string) => {
     soundEffects.click();
-    setProfile(prev => {
+    setProfile((prev) => {
       const list = prev.watchlist || ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY'];
       const nextList = list.includes(symbol)
-        ? list.filter(s => s !== symbol)
+        ? list.filter((s) => s !== symbol)
         : [...list, symbol];
+      if (activeUserId) {
+        marketApi.updateWatchlist(nextList).catch(console.error);
+      }
       return {
         ...prev,
         watchlist: nextList,
@@ -600,85 +1134,26 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const skipTutorialWithDiagnostic = (scorePercent: number) => {
     soundEffects.levelUp();
-    let unlockedMissionCount = 3;
-    let newLevel = 1;
-    let initialXp = 400;
-
-    if (scorePercent >= 75) {
-      unlockedMissionCount = 10;
-      newLevel = 4;
-      initialXp = 1500;
-    } else if (scorePercent >= 50) {
-      unlockedMissionCount = 6;
-      newLevel = 2;
-      initialXp = 800;
-    }
-
-    const unlockedMissions = BEGINNER_MISSIONS.slice(0, unlockedMissionCount).map(m => m.id);
-    const nextMission = BEGINNER_MISSIONS[unlockedMissionCount] || BEGINNER_MISSIONS[BEGINNER_MISSIONS.length - 1];
-
-    setProfile(prev => ({
+    setProfile((prev) => ({
       ...prev,
       hasCompletedOnboarding: true,
       appMode: scorePercent >= 75 ? 'FREE' : 'JOURNEY',
-      level: newLevel,
-      xp: prev.xp + initialXp,
-      completedMissions: unlockedMissions,
-      currentMissionId: nextMission.id,
-      unlockedFeatures: [
-        'Stock Basics',
-        'Order Floor',
-        'Portfolio Tracker',
-        'Chart Arena',
-        'Candlestick Combat Arena',
-        ...(scorePercent >= 75 ? ['Free Mode', 'Full Free Mode & Advanced Districts'] : [])
-      ],
-      stats: {
-        knowledgeScore: Math.round(scorePercent * 0.7),
-        tradingDisciplineScore: Math.round(scorePercent * 0.6),
-        riskManagementScore: Math.round(scorePercent * 0.6),
-        technicalAnalysisScore: Math.round(scorePercent * 0.5),
-        fundamentalAnalysisScore: Math.round(scorePercent * 0.5),
-        portfolioScore: Math.round(scorePercent * 0.5),
-        psychologyScore: Math.round(scorePercent * 0.5),
-        overallMasteryScore: Math.round(scorePercent * 0.6),
-      }
     }));
   };
 
-  const isFeatureUnlocked = (featureName: string): boolean => {
-    if (profile.appMode === 'FREE' && profile.completedMissions.length >= 7) return true;
-    return profile.unlockedFeatures.includes(featureName);
+  const isFeatureUnlocked = (_featureName: string): boolean => {
+    return true;
   };
 
-  const isDistrictUnlocked = (districtId: DistrictId): boolean => {
-    if (profile.appMode === 'FREE') return true;
-    switch (districtId) {
-      case 'bank-district':
-        return true; // Always unlocked (Stage 1)
-      case 'stock-exchange':
-        return profile.completedMissions.includes('mission-2');
-      case 'chart-arena':
-        return profile.completedMissions.includes('mission-7');
-      case 'corporate-district':
-        return profile.completedMissions.includes('mission-10') || profile.level >= 4;
-      case 'psychology-lab':
-        return profile.completedMissions.includes('mission-10') || profile.level >= 5;
-      case 'portfolio-tower':
-        return profile.completedMissions.includes('mission-10') || profile.level >= 6;
-      case 'derivatives-arena':
-        return profile.level >= 9;
-      case 'quant-lab':
-        return profile.level >= 8;
-      default:
-        return false;
-    }
+  const isDistrictUnlocked = (_districtId: DistrictId): boolean => {
+    return true;
   };
 
   return (
     <GameContext.Provider
       value={{
         profile,
+        isHydratingServerState,
         activeGame,
         activeMissionId,
         selectedDistrict,
@@ -686,13 +1161,23 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         stocks,
         dailyQuests,
         isAIMentorOpen,
+        isAIMentorMinimized,
+        setAIMentorMinimized,
         aiMentorInitialPrompt,
         openAIMentorWithPrompt,
         clearAIMentorInitialPrompt,
+        mentorContext,
+        updateMentorContext,
+        navigateTargetModuleId,
+        setNavigateTargetModuleId,
+        navigateTargetTradeSymbol,
+        setNavigateTargetTradeSymbol,
         isProfileModalOpen,
         isLeaderboardOpen,
         soundOn,
         totalPortfolioValue,
+        totalOptionsUnrealizedPnL,
+        totalOptionsMarginBlocked,
         totalNetWorth,
         setActiveGame,
         setActiveMissionId,
@@ -702,23 +1187,33 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLeaderboardOpen,
         toggleSound,
         addXP,
+        addXp: addXP,
         addVirtualCash,
         deductVirtualCash,
         addTraderFiTokens,
         spendTraderFiTokens,
         recordTournamentResult,
         executeTrade,
+        placeEquityOrder,
+        cancelEquityOrder,
+        placeOptionOrder,
+        refreshPortfolioFromServer,
         recordMistake,
         completeDailyQuest,
         updateStats,
         resetProgress,
-        // Journey & Progressive Unlock Handlers
         setAppMode,
         completeOnboarding,
         startMission,
         completeMission,
         completeNcfmLesson,
         completeCourseTopic,
+        recordLessonProgress,
+        recordExerciseCompletion,
+        recordModuleAssessment,
+        setLastActiveCourseLocation,
+        saveCompanyWorksheet,
+        recordGameScore,
         resetLearningProgress,
         toggleWatchlist,
         isNcfmLessonUnlocked,

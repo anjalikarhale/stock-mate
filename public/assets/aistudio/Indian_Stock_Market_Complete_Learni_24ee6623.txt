@@ -1,0 +1,838 @@
+Indian Stock Market: Complete Learning Project
+Beginner → Intermediate → Advanced | India-focused | Theory, practical analysis, trading strategies and risk management
+
+The main challenge in learning the stock market is not memorizing indicators or financial ratios. It is learning how to connect the economy, a company's financial health, market price, trading volume, and risk to make a decision.
+
+This project is structured as a complete course you can use for academic submission, self-study, practical market analysis, and eventually developing your own trading system.
+1. Project overview
+Project title: A Comprehensive Study of the Indian Stock Market: Fundamental Analysis, Technical Analysis and Advanced Trading Strategies
+
+Objectives
+- Understand how India's stock market operates, from exchanges to settlement.
+- Learn investing and trading from basic concepts to advanced strategies.
+- Perform fundamental analysis to estimate a company's financial strength and value.
+- Perform technical analysis using charts, price action, volume, indicators and market structure.
+- Understand Nifty 50, Sensex, Bank Nifty, derivatives, options and futures.
+- Learn risk management, trading psychology, backtesting and portfolio management.
+- Apply the concepts to real Indian companies and market data.
+2. The complete course roadmap
+
+Level 1 — Beginner
+Foundation
+Learn the stock market's structure, terminology, investing, trading, orders, indices, brokers, settlement and risk.
+
+Modules 1–5
+
+
+
+
+Level 2 — Intermediate
+Analysis
+Learn financial statements, valuation, chart patterns, indicators, volume, market structure and trading systems.
+
+Modules 6–11
+
+
+
+
+Level 3 — Advanced
+Strategy development
+Learn derivatives, options Greeks, quantitative methods, institutional flows, portfolio construction, backtesting and advanced risk control.
+
+Modules 12–16
+
+
+
+3. Beginner level: understand the Indian stock market
+Module 1 — What is the stock market?
+A stock market is a regulated marketplace where buyers and sellers trade shares and other financial instruments.
+
+When you buy a company's share, you acquire a small ownership interest in that company. Your return can come from:
+- Capital appreciation: The share price increases.
+- Dividends: The company distributes part of its profits or reserves, subject to its policies and applicable rules.
+- Losses: The share price falls, or the company performs poorly or fails.
+Example: If you buy 10 shares at ₹200 each, your initial investment is ₹2,000 before costs. If the shares later trade at ₹250, their market value becomes ₹2,500, giving an unrealized gain of ₹500 before charges and taxes.
+
+The important distinction: a higher share price does not automatically mean a company has become more valuable relative to its earnings, assets or future prospects.
+Module 2 — India's stock market structure
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Understand the roles of the main institutions:
+Institution	Role
+SEBI	Regulates India's securities markets and protects investors.
+NSE	Operates a major electronic stock exchange.
+BSE	Operates a major stock exchange and the Sensex index.
+NSDL	Provides securities depository services.
+CDSL	Provides securities depository services.
+Clearing corporations	Calculate obligations and facilitate settlement of trades.
+Stockbroker	Gives investors and traders access to the exchange.
+
+You typically need three related accounts or services to invest in shares:
+1. Bank account: Holds your money.
+2. Trading account: Places buy and sell orders through a broker.
+3. Demat account: Holds your securities electronically.
+The exchange matches eligible orders; the clearing and settlement system handles the resulting obligations. A broker provides access but does not guarantee profits.
+Module 3 — Important Indian market indices
+
+
+
+
+
+
+
+
+
+Nifty 50
+
+Tracks 50 major listed companies selected under the index methodology. It is a widely followed benchmark for India's large-cap equity market.
+
+
+
+
+
+
+
+
+
+
+
+Sensex
+
+Tracks 30 major companies selected under the index methodology and is a key benchmark for the Indian market.
+
+
+
+
+
+
+
+
+
+
+
+Nifty Bank
+
+Tracks selected banking stocks. Traders use it to study banking-sector strength and weakness.
+
+
+
+Other indices worth learning include Nifty Next 50, Nifty 100, Nifty Midcap 150, Nifty Smallcap indices and sectoral indices.
+
+Important: An index is a measurement of a defined basket of securities, not a stock that you directly own. You can gain exposure through eligible index funds, ETFs and derivatives.
+Module 4 — How a stock trade works
+A simplified transaction:
+1. You select a stock and decide how many shares to buy.
+2. You place a market order or limit order through your broker.
+3. The exchange's matching system pairs compatible buy and sell orders.
+4. Your order may be fully executed, partially executed or remain unfilled.
+5. Clearing and settlement processes complete the transaction according to applicable rules.
+Common order types:
+Order	Meaning
+Market order	Prioritizes execution at available prices, not a guaranteed exact price.
+Limit order	Sets the maximum purchase price or minimum selling price you accept.
+Stop-loss order	Activates or submits an order when its trigger condition is reached; execution price may differ from the trigger.
+Stop-limit order	Uses a trigger and limit price; it may not execute.
+GTT / conditional orders	Broker-specific features that act according to configured conditions and rules.
+
+Learn the difference between the bid, ask, spread, liquidity, slippage and order-book depth. These matter especially when trading less-liquid shares.
+Module 5 — Investing versus trading
+Feature	Investing	Trading
+Main objective	Build wealth over time	Capture shorter-term price moves
+Typical holding period	Years	Minutes to months
+Main research	Business quality, valuation, earnings	Price action, volume, catalysts and risk
+Major risk	Business deterioration and overvaluation	Timing errors, leverage, costs and repeated losses
+Common mistake	Buying a good company at any price	Overtrading without a tested edge
+
+There is no universally superior approach. Your time horizon, knowledge, costs, capital and ability to tolerate losses all matter.
+4. Intermediate level: fundamental analysis
+Fundamental analysis attempts to estimate a company's business quality and intrinsic value. It is especially useful for long-term investing, although traders also use earnings, results and economic data to understand catalysts.
+
+SEBI's investor education material explains the distinction between company-focused fundamental analysis and price-and-volume-focused technical analysis. 
+SEBI Investor ::+1
+
+Module 6 — The three financial statements
+Every serious stock analysis should begin with the annual report, quarterly results, balance sheet, profit and loss statement, cash flow statement and notes to the accounts.
+
+
+
+
+
+
+
+
+
+A. Profit and Loss Statement (P&L)
+
+Shows revenue, expenses and profit over a period.
+- Revenue: sales generated by the business.
+- Operating profit: profit from operations before specified non-operating items and financing costs.
+- Net profit: profit after expenses, interest and tax.
+- EPS: earnings attributable to each share, subject to the reported EPS definition.
+Question: Is the company growing profitably, or only increasing sales?
+
+
+
+
+
+
+
+
+
+
+
+
+B. Balance Sheet
+
+Shows assets, liabilities and shareholders' equity at a particular date.
+- Assets: cash, inventory, property, receivables and other resources.
+- Liabilities: loans, payables and other obligations.
+- Equity: residual interest after liabilities.
+Accounting equation: Assets = Liabilities + Equity.
+
+Question: Can the company meet its obligations and fund future growth?
+
+
+
+
+
+
+
+
+
+
+
+
+C. Cash Flow Statement
+
+Tracks cash generated and spent.
+- Operating cash flow (CFO): cash generated by business operations.
+- Investing cash flow: capital expenditure, acquisitions and investment transactions.
+- Financing cash flow: borrowing, debt repayment, share issuance, dividends and similar transactions.
+Question: Does reported profit translate into actual cash generation?
+
+
+
+A company can report accounting profits while facing cash-flow difficulties. That is why you must study all three statements together.
+Module 7 — Financial ratios and formulas
+These are core formulas for your project and practical stock screening.
+Ratio	Formula	What it helps assess
+EPS	Net income attributable to ordinary shareholders ÷ weighted average shares	Earnings per share
+P/E	Market price per share ÷ EPS	Price paid for each rupee of earnings
+P/B	Market price per share ÷ book value per share	Price relative to accounting net worth
+ROE	Profit attributable to shareholders ÷ average shareholders' equity × 100	Return generated on equity
+ROCE	EBIT ÷ average capital employed × 100	Return on operating capital
+Debt-to-equity	Total debt ÷ shareholders' equity	Financial leverage
+Current ratio	Current assets ÷ current liabilities	Short-term balance-sheet coverage
+Operating margin	Operating profit ÷ revenue × 100	Operating profitability
+Net margin	Net profit ÷ revenue × 100	Final profitability
+Dividend yield	Annual dividend per share ÷ current share price × 100	Dividend income relative to price
+Free cash flow	Operating cash flow − capital expenditure	Cash remaining after capital investment
+
+Use consistent definitions when comparing companies. For example, some sources calculate ROCE using EBIT divided by average capital employed, while others use different conventions.
+
+How to interpret ratios correctly
+- A low P/E is not automatically a bargain; earnings may be declining.
+- A high ROE can reflect strong operations, but it can also be amplified by debt or a small equity base.
+- A low debt-to-equity ratio may be desirable for many businesses, but financial companies require sector-specific analysis.
+- A high dividend yield may indicate a sustainable payout or a share price falling in anticipation of trouble.
+- Compare ratios with industry peers and historical levels, not just a universal threshold.
+Module 8 — Company research and valuation
+Fundamental analysis is broader than checking ratios. Use the following process.
+Company analysis checklist
+Research progress
+0/9
+
+
+
+[ ] Understand the business model and its sources of revenue
+[ ] Study the industry, competitors and barriers to entry
+[ ] Review at least 5 years of revenue, earnings and margins
+[ ] Examine debt, cash flow, working capital and capital expenditure
+[ ] Check promoter shareholding, pledges and dilution
+[ ] Review auditor remarks, related-party transactions and governance
+[ ] Read annual reports, quarterly results and exchange disclosures
+[ ] Estimate intrinsic value and compare it with the current price
+[ ] Identify risks that could invalidate the investment thesis
+
+Three valuation methods
+1. Relative valuation
+
+Compare a company's P/E, EV/EBITDA, P/B or other relevant multiples with comparable companies. Adjust for differences in growth, profitability, debt, accounting and business risk.
+
+2. Discounted cash flow (DCF)
+
+Estimate future free cash flows and discount them to present value:
+\[
+EV=\sum_{t=1}^{n}\frac{FCF_t}{(1+r)^t}
++\frac{TV_n}{(1+r)^n}
+\]
+
+Here, \(r\) is the discount rate, \(TV_n\) is terminal value and \(EV\) is estimated enterprise value. To estimate equity value, adjust enterprise value for net debt and other relevant claims, then divide by the appropriate share count.
+
+3. Dividend discount model
+
+Estimate the present value of expected future dividends. A simplified constant-growth version is:
+\[
+P_0=\frac{D_1}{r-g}
+\]
+
+This model requires \(r>g\) and is most useful when dividends are reasonably predictable.
+Practical valuation example
+Suppose a hypothetical company has:
+- EPS = ₹20
+- Current market price = ₹400
+- Your estimated fair P/E = 18
+Its current P/E is \(400/20=20\). If the estimated fair P/E were justified, a simple implied value would be \(20\times18=₹360\).
+
+That does not prove the share is worth ₹360. Your fair multiple is an assumption, and the calculation ignores changes in future earnings, risk, dividends and other factors. A credible valuation uses several scenarios rather than one precise-looking number.
+Module 9 — Economic and sector analysis
+A company's results are affected by more than its management.
+
+Study:
+- GDP growth and economic activity.
+- CPI inflation and interest rates set by the Reserve Bank of India.
+- Government expenditure, taxation and fiscal policy.
+- INR exchange rates, crude oil prices and commodity costs.
+- Corporate earnings growth and credit conditions.
+- FII/FPI and DII activity, market breadth and liquidity.
+- Sector-specific factors, regulation and global demand.
+Examples of sector sensitivity:
+Sector	Important variables
+Banks	Credit growth, asset quality, deposit costs, margins
+IT services	Global technology spending, client demand, currency
+FMCG	Consumer demand, input costs, pricing power
+Automobiles	Interest rates, financing availability, commodity prices
+Pharma	Regulatory compliance, product pipeline, pricing
+Capital goods	Order book, execution, working capital, public and private investment
+
+Do not interpret FII selling as automatic proof that the market must fall, or DII buying as proof that it must rise. Flows are one input among earnings, valuations, liquidity and expectations.
+
+5. Intermediate level: technical analysis
+Technical analysis studies historical price, volume and related market data to identify trends, momentum, possible entry and exit points, and changing supply and demand. It does not reliably predict every future price movement. 
+SEBI Investor ::+1
+
+Module 10 — Candlestick charts
+A candlestick represents four prices for a selected period:
+- Open: first traded price in the period.
+- High: highest traded price.
+- Low: lowest traded price.
+- Close: last traded price.
+
+
+
+
+
+
+
+sofi.com
+
+
+A green or bullish candle conventionally means the close is above the open. A red or bearish candle means the close is below the open. The wicks show the range beyond the candle's body.
+Candlestick patterns to learn
+
+
+
+
+
+
+
+
+
+Hammer
+
+A small body near the top with a long lower wick. It may suggest rejection of lower prices after a decline, but confirmation and context matter.
+
+
+
+
+
+
+
+
+
+
+
+Bullish engulfing
+
+A bullish candle's body engulfs the previous bearish candle's body. It may indicate improving buying pressure, particularly after a decline.
+
+
+
+
+
+
+
+
+
+
+
+Doji
+
+Open and close are very close. It can indicate indecision, but it does not independently predict a reversal.
+
+
+
+
+
+
+
+
+
+
+
+Shooting star
+
+A small body near the lower end of the candle's range with a long upper wick. It can signal rejection of higher prices after an advance.
+
+
+
+Learn to interpret patterns near support, resistance and established trends rather than treating every candle as a standalone trading signal.
+Module 11 — Trends, support and resistance
+
+
+
+
+
+
+
+fptshop.com.vn
+
+
+Three broad market conditions:
+- Uptrend: higher highs and higher lows.
+- Downtrend: lower highs and lower lows.
+- Range-bound market: price oscillates between relatively stable support and resistance zones.
+Support and resistance are better understood as zones than perfectly precise lines. A breakout can fail, and a level that previously acted as support can later become resistance.
+Common chart patterns
+Pattern	Typical interpretation	Main risk
+Double bottom	Potential bullish reversal	Second low may break down
+Double top	Potential bearish reversal	Resistance may be broken
+Head and shoulders	Potential bearish reversal	Neckline break may fail
+Inverse head and shoulders	Potential bullish reversal	Breakout may fail
+Triangle	Possible consolidation before expansion	Direction is not guaranteed
+Flag or pennant	Possible trend continuation	Pattern can fail or become a reversal
+
+Module 12 — Technical indicators
+
+
+
+
+
+
+
+
+
+1. Moving averages (SMA and EMA)
+
+Smooth price data and help identify trend direction. An SMA uses a simple average; an EMA gives greater weight to recent prices. Crossovers can lag and generate false signals.
+
+
+
+
+
+
+
+
+
+
+
+
+2. Relative Strength Index (RSI)
+
+Measures recent price momentum on a scale from 0 to 100. Readings above 70 or below 30 are conventional overbought/oversold reference zones, not automatic sell/buy signals.
+
+
+
+
+
+
+
+
+
+
+
+
+3. MACD
+
+The Moving Average Convergence Divergence indicator compares moving averages to examine momentum and trend changes. Crossovers and divergences need context.
+
+
+
+
+
+
+
+
+
+
+
+
+4. Bollinger Bands
+
+Place bands around a moving average using a volatility measure. Band expansion and contraction show changing volatility, but touching a band is not necessarily a reversal signal.
+
+
+
+
+
+
+
+
+
+
+
+
+5. VWAP
+
+Volume Weighted Average Price gives a volume-weighted average of traded prices over a defined session or anchored period. It is commonly used in intraday analysis.
+
+
+
+
+
+
+
+
+
+
+
+
+6. ATR
+
+Average True Range measures volatility, not direction. It can help calibrate stops and position sizes to changing market conditions.
+
+
+
+Other tools to study include volume, OBV, stochastic oscillators, Fibonacci retracements, pivot points, ADX and Ichimoku. Start with a small, complementary set rather than adding many overlapping indicators.
+Module 13 — Price action and market structure
+Move beyond individual indicators to understand how prices develop.
+
+Core concepts:
+- Break of Structure (BOS): a break of a meaningful prior swing level, interpreted in the context of trend and timeframe.
+- Change of Character (CHoCH): a possible early shift in directional structure; definitions vary between trading methodologies.
+- Liquidity: the ability to trade without excessive price impact. In charting terminology, traders also use “liquidity” to refer to areas around obvious highs and lows where stop orders may cluster.
+- Order blocks: chart zones interpreted by some traders as areas of prior institutional buying or selling. The institutional interpretation is not directly proven by the chart alone.
+- Fair Value Gap (FVG): a three-candle price imbalance under a commonly used charting definition.
+- Volume confirmation: comparing trading activity around breakouts, breakdowns and reversals.
+Advanced terminology does not make a strategy profitable. Each concept needs an objective definition, repeatable rules and out-of-sample testing.
+Module 14 — Volume, open interest and market participation
+Understand the difference between the data types:
+- Volume: quantity traded during a period.
+- Open interest (OI): number of outstanding derivative contracts that remain open.
+- Price and OI together: can help classify changes in participation, but do not reveal every participant's intent.
+- PCR (put-call ratio): ratio of put activity to call activity, defined using either OI or volume. Those two versions are not interchangeable.
+- Market breadth: the number or proportion of stocks rising versus falling.
+- Advance-decline data: helps assess whether index movement is broad-based or concentrated in a few large stocks.
+A common futures-market interpretation is:
+Price	Open interest	Conventional interpretation
+Rising	Rising	Long buildup
+Falling	Rising	Short buildup
+Rising	Falling	Short covering
+Falling	Falling	Long unwinding
+
+These labels are conventions, not proof of who initiated the trade. Every derivative contract has both a long and a short side. OI alone cannot tell you whether institutions are bullish or bearish.
+
+6. Advanced level: derivatives, strategies and quantitative trading
+Module 15 — Futures and options
+Futures and options are derivatives: their values depend on an underlying instrument, such as an index or stock. They introduce leverage, expiry-related effects and additional risks.
+
+Futures
+
+A futures contract creates an obligation under its contract terms. Understand lot size, expiry, margin, mark-to-market settlement, basis and rollover.
+
+Options
+
+An option buyer pays a premium for a contract with specified rights. A call gives the buyer the right to buy the underlying under the contract terms; a put gives the buyer the right to sell. The option seller takes on corresponding obligations.
+
+Learn these concepts:
+- Strike price, spot price and premium.
+- Expiry and time to expiry.
+- Intrinsic value and time value.
+- In-the-money, at-the-money and out-of-the-money options.
+- Implied volatility and volatility skew.
+- Exercise, assignment and settlement rules applicable to the contract.
+- Margin, liquidity, bid-ask spread and expiry risk.
+The options Greeks
+Greek	What it measures
+Delta	Sensitivity to a change in the underlying price
+Gamma	Sensitivity of delta to a change in the underlying
+Theta	Sensitivity to the passage of time
+Vega	Sensitivity to changes in implied volatility
+Rho	Sensitivity to changes in interest rates
+
+Greeks are local sensitivity estimates, not guarantees. They change as the underlying, time and volatility change.
+
+Example: Buying an option does not automatically make a trade safer than buying shares. The premium can lose most or all of its value, and short options can carry very large losses. Never choose an option solely because it looks cheap.
+Module 16 — Trading systems and advanced analysis
+Build competence in the following areas in order:
+1. Market regime analysis: identify trending, ranging and high-volatility conditions.
+2. Multi-timeframe analysis: distinguish the broad trend from the entry timeframe.
+3. Strategy design: define objective entry, exit, stop and no-trade conditions.
+4. Position sizing: calculate quantity from the risk allowed per trade.
+5. Backtesting: test the rules on historical data while accounting for costs and realistic execution.
+6. Forward testing: paper trade or trade in a simulated environment before risking meaningful capital.
+7. Performance review: evaluate expectancy, drawdown, consistency and robustness.
+8. Portfolio risk: measure correlated positions and total exposure, not just individual trade risk.
+Advanced topics can include market profile, volume profile, anchored VWAP, systematic factor investing, statistical arbitrage, volatility models, algorithmic execution and Python-based research.
+
+These are specializations, not prerequisites for basic market competence.
+7. Risk management: the most important practical skill
+A strategy can be correct often and still lose money if losses are too large. Risk management determines how much damage a bad trade can do.
+Position sizing formula
+\[
+\text{Position size}=
+\frac{\text{Maximum planned loss}}{\text{Entry price}-\text{Stop price}}
+\]
+
+For a long stock trade, assuming the stop is below the entry:
+Interactive position-size calculator
+Illustrative cash-equity trade. Change the inputs to see how the risk and quantity change.
+Trading capital (₹)
+
+Risk per trade0.50%
+
+0.25%
+1%
+2%
+
+
+
+
+
+Entry price (₹)
+
+Stop price (₹)
+
+
+Target price (₹)
+
+
+Risk budget
+₹500
+
+
+Estimated quantity
+33
+
+
+Capital required
+₹16,500
+
+
+Reward/risk ratio
+3.00:1
+
+
+
+Assumes a long cash-equity trade, a fully available cash budget and fills at the stated prices. Actual losses may exceed the planned risk because of gaps, slippage, charges or stop execution. This is a learning calculator, not a trade recommendation.
+
+Other risk concepts to master
+- Risk/reward ratio: potential reward compared with planned risk.
+- Expectancy: average expected profit or loss per trade over a sufficiently representative sample.
+- Maximum drawdown: the largest peak-to-trough decline in portfolio value.
+- Diversification: spreading exposure across different investments and risk factors.
+- Correlation: how assets or positions move in relation to each other.
+- Trading costs: brokerage, exchange charges, taxes, duties, slippage and other applicable costs.
+- Leverage: exposure larger than the capital committed, which magnifies both gains and losses.
+A high win rate alone is not evidence of a good strategy. Average wins, average losses, transaction costs and the risk of extreme losses matter too.
+
+For perspective, SEBI reported that 93% of individual traders in the equity F&O segment incurred losses during FY2022–FY2024. 
+Securities and Exchange Board of India+1
+ This is a reason to treat derivatives as an advanced subject, not a shortcut to quick profits.
+8. Build a complete trading strategy
+A strategy should be a written set of rules, not a collection of chart signals selected after seeing what happened.
+
+Here is an illustrative framework for a stock swing-trading system. It is a template to test, not a proven profitable strategy.
+Example: trend-pullback system
+1. Market filter: assess whether the benchmark and stock are in an established uptrend.
+2. Stock selection: choose sufficiently liquid shares with acceptable business and financial risk.
+3. Setup: wait for a pullback toward a defined trend reference or support zone.
+4. Entry trigger: require a predefined bullish price-action confirmation instead of buying solely because the price fell.
+5. Invalidation: determine the price or condition that would prove the setup wrong.
+6. Position sizing: calculate quantity from the planned loss and available capital.
+7. Exit: specify stop, profit-taking and time-based exit rules before entering.
+8. Review: record the trade, costs, rule compliance and outcome.
+
+Backtesting checklist
+Before trusting a strategy, test:
+- Different market regimes and multiple years of data.
+- Out-of-sample periods not used to design the rules.
+- Brokerage, taxes, slippage and realistic order fills.
+- Survivorship bias, look-ahead bias and corporate actions.
+- Maximum drawdown and losing streaks.
+- Sensitivity to small changes in parameters.
+- Performance against a simple benchmark.
+A strategy that works only with one precise indicator setting or on a short historical period may be overfitted.
+9. Practical project: analyse an Indian company
+Use a listed company as your case study. Choose a business you understand, then use official filings and exchange disclosures rather than social media tips.
+Company research worksheet
+Company
+
+Analysis objective
+Long-term investing
+
+Swing trading
+
+Intraday trading
+
+
+Business model and major revenue sources
+
+Five-year sales and earnings trend
+
+Debt, cash flow and profitability
+
+Current valuation and comparable peers
+
+Trend, support/resistance and volume
+
+Three major risks and what would invalidate the thesis
+
+  Copy completed worksheetAnalyse this company with me
+For your final report, include the analysis date, sources, financial tables, charts, valuation assumptions, a bear/base/bull scenario and a conclusion. Do not state that a stock is definitely going to rise or fall.
+10. Suggested 12-week study schedule
+Week	Main topic	Practical output
+1	Market structure and terminology	Explain the market and its participants
+2	Orders, accounts, indices and settlement	Simulate a share transaction
+3	Financial statements	Read one annual report
+4	Ratios and company quality	Build a company comparison table
+5	Valuation and economic analysis	Create a basic valuation
+6	Candlesticks and trend structure	Mark charts without indicators
+7	Indicators, volume and price action	Write a chart-analysis report
+8	Fundamental and technical integration	Prepare a stock research note
+9	Futures, options and Greeks	Solve payoff and sensitivity exercises
+10	Risk management and strategy design	Write a complete rule-based strategy
+11	Backtesting and portfolio analysis	Test a strategy and calculate drawdown
+12	Final case study and presentation	Submit the completed project
+
+Use daily market observation and paper trading alongside the course. Do not move to live trading merely because the schedule says you have reached a particular week.
+11. Quiz: test your understanding
+Knowledge check
+6 questions
+
+1. Which statement shows a company's assets, liabilities and equity?
+
+Profit and loss statement
+
+Balance sheet
+
+Cash flow statement
+
+Order book
+
+
+
+2. A stock has an EPS of ₹25 and trades at ₹500. What is its P/E?
+
+5
+
+10
+
+20
+
+25
+
+
+
+3. What does RSI primarily measure?
+
+Company debt
+
+Price momentum
+
+Cash flow
+
+Open interest
+
+
+
+4. A stock position has an entry at ₹200 and a stop at ₹190. At 10 shares, what is the planned price risk?
+
+₹10
+
+₹100
+
+₹200
+
+₹1,900
+
+
+
+5. What does rising price and rising futures open interest conventionally suggest?
+
+Short covering
+
+Long buildup
+
+Long unwinding
+
+Guaranteed bullish continuation
+
+
+
+6. Why is a low P/E not sufficient to buy a stock?
+
+P/E never matters
+
+The company may have declining earnings or elevated risks
+
+Low P/E guarantees high dividends
+
+It proves the company is overvalued
+
+
+Check answers
+12. Reliable resources for your project
+Start with official educational material and use market data from reliable sources.
+- SEBI Investor Education — Securities market basics, investing and investor protection. 
+  SEBI Investor ::+1
+- National Stock Exchange of India — NSE educational courses, including technical analysis, fundamental analysis, derivatives and valuation. 
+  NSE India+1
+- National Institute of Securities Markets — Securities market learning and certifications. 
+  NISM+1
+- NSE — Market timings and settlement cycle. Check official updates because timings, settlement arrangements and contract specifications can change. 
+  NSE India+1
+- Company annual reports and exchange filings — use them to verify revenue, profit, cash flow, shareholding, corporate actions and material disclosures.
+Final project recommendation
+Structure your academic submission into six major chapters:
+1. Introduction and structure of the Indian stock market.
+2. Securities, trading mechanisms, regulation and settlement.
+3. Fundamental analysis, financial ratios and valuation.
+4. Technical analysis, chart patterns and indicators.
+5. Risk management, derivatives and strategy testing.
+6. Practical company case study, findings, limitations and conclusion.
+Include a glossary, formulas, charts, practical exercises, quiz answers, bibliography and a statement of methodology.
+
+The standard to aim for is not the ability to predict every market move. It is the ability to explain why a trade or investment might work, what evidence would invalidate it, how much could be lost, and whether the method has been tested after costs.

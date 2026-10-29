@@ -1,0 +1,746 @@
+# STOCKMATE — COMPLETE PROJECT UPGRADE MASTER PROMPT
+
+Act as a senior full-stack engineer, financial-market data engineer, UI/UX designer, and educational product architect.
+
+I have an existing project called **StockMate**, an interactive Indian stock-market learning and paper-trading platform. I want to upgrade the existing application, not create a new project from scratch.
+
+## 1. FIRST: INSPECT THE EXISTING PROJECT
+
+Before changing any code:
+
+1. Inspect the complete project structure, existing components, routes, contexts, server endpoints, database, authentication system, styling, charts, games, learning modules, and environment variables.
+2. Read the uploaded reference file: `Indian Stock Market Complete Learni(1).txt` in full.
+3. Use the existing StockMate codebase as the source of truth for current implementation and the text file as the primary reference for educational content.
+4. Identify why the following existing features are broken or poorly implemented:
+   - Login credentials or accounts are not retained between sessions.
+   - The Built-in AI Mentor popup covers the entire screen.
+   - Selecting different stocks displays the same chart.
+   - Existing learning games do not match their lessons.
+   - The Play section contains unrelated games.
+   - The learning visualizer does not provide meaningful educational value.
+   - The Home page displays excessive course content.
+5. Create a concise internal implementation checklist and then implement the changes in the existing codebase.
+
+Do not stop after giving me a report or plan. Continue implementing, testing, and fixing the actual project.
+
+### Non-negotiable constraints
+
+- Preserve the existing React, TypeScript, Vite, Express, Socket.IO, database, and styling architecture wherever possible.
+- Preserve existing classroom functionality, teacher dashboards, leaderboards, admin functionality, student profiles, portfolio, missions, authentication, and working paper-trading features.
+- Reuse existing components and APIs when suitable.
+- Do not replace the whole application with a new template.
+- Do not delete working functionality to make the changes easier.
+- Do not hardcode sample prices and label them as live data.
+- Do not expose API tokens, passwords, or other secrets in frontend code.
+- Do not leave non-functional buttons, placeholder charts, fake option chains, or mock data presented as real market data.
+- Make incremental, maintainable changes and run the available tests and build commands after implementation.
+
+---
+
+## 2. HOME PAGE — COURSE PROGRESS ONLY
+
+Redesign the student Home page to make it a clean progress dashboard.
+
+The Home page should display:
+
+- Overall course completion percentage.
+- A progress bar.
+- Number of modules completed out of the total.
+- Current learning level: Beginner, Intermediate, or Advanced.
+- Current module or recommended next lesson.
+- A clear Continue Learning action.
+- Optional compact streak or learning-time indicators if already supported.
+
+Do not display the complete course curriculum, every lesson, long descriptions, or all module contents on Home.
+
+The complete course curriculum belongs inside the Learn section.
+
+Calculate progress using actual persisted student progress. Do not hardcode percentages. Progress must update after completing lessons, quizzes, practical exercises, and module assessments according to a consistent completion policy.
+
+When a returning student logs in, restore their actual progress rather than resetting it.
+
+---
+
+## 3. FIX THE BUILT-IN AI MENTOR POPUP
+
+The current Built-in AI Mentor popup occupies almost the entire screen and prevents access to the rest of the application.
+
+Replace it with a compact, responsive floating assistant.
+
+Requirements:
+
+- Floating launcher button fixed near the bottom-right corner.
+- Clicking the launcher opens a small chat panel, approximately 360–420 px wide on desktop and constrained to the available viewport height.
+- Never cover the full application by default.
+- Provide minimize, close, and reopen controls.
+- The student must still be able to see and use the underlying navigation and tabs.
+- Use a responsive full-height or near-full-width layout only on small mobile screens when necessary.
+- Keep chat history during tab navigation.
+- Do not block scrolling or clicks outside the chat.
+- Handle loading, API errors, missing API keys, and empty responses gracefully.
+- Preserve the existing Gemini integration and backend security.
+
+The mentor should answer questions about the currently selected lesson, explain financial terminology, provide hints, explain chart patterns, and help students understand paper-trading decisions.
+
+Ground learning answers in the course content and distinguish educational explanations from financial advice. Do not invent current prices or guarantee profits.
+
+---
+
+## 4. REBUILD THE LEARN SECTION AROUND THE REFERENCE FILE
+
+Use `Indian Stock Market Complete Learni(1).txt` as the primary content source.
+
+The reference contains a 16-module curriculum divided into three levels. Retain its essential terminology, formulas, progression, practical activities, and risk-management emphasis.
+
+Do not merely display the uploaded text as a long article. Convert it into structured, interactive learning modules.
+
+### Level 1 — Beginner: Modules 1–5
+
+**Module 1: What Is the Stock Market?**
+- Shares and ownership.
+- Capital appreciation, dividends, and losses.
+- Market price versus company value.
+- Simple investment calculations.
+
+**Module 2: India's Stock Market Structure**
+- SEBI, NSE, BSE, NSDL, CDSL, brokers, and clearing corporations.
+- Bank, trading, and Demat accounts.
+- Market participation and settlement basics.
+
+**Module 3: Important Indian Market Indices**
+- Nifty 50, Sensex, and Nifty Bank.
+- Other major indices.
+- Index composition and benchmark interpretation.
+
+**Module 4: How a Stock Trade Works**
+- Market, limit, stop-loss, and stop-limit orders.
+- Bid, ask, spread, liquidity, slippage, and order-book depth.
+- Order execution and settlement.
+
+**Module 5: Investing Versus Trading**
+- Long-term investing versus short-term trading.
+- Objectives, time horizons, research methods, and risks.
+
+### Level 2 — Intermediate: Modules 6–14
+
+**Module 6: The Three Financial Statements**
+- Profit and Loss Statement.
+- Balance Sheet.
+- Cash Flow Statement.
+- Understanding the relationship between profit and cash flow.
+
+**Module 7: Financial Ratios and Formulas**
+- EPS, P/E, P/B, ROE, ROCE, debt-to-equity, current ratio, operating margin, net margin, dividend yield, and free cash flow.
+- Formula explanations and numerical exercises.
+- Common interpretation mistakes.
+
+**Module 8: Company Research and Valuation**
+- Business models and industry analysis.
+- Financial performance, governance, annual reports, and risks.
+- Relative valuation, discounted cash flow, and dividend discount models.
+- Bear, base, and bull scenarios.
+
+**Module 9: Economic and Sector Analysis**
+- GDP, inflation, RBI interest rates, government policy, currency, crude oil, FII/FPI and DII flows, and sector-specific variables.
+
+**Module 10: Candlestick Charts**
+- Open, high, low, and close.
+- Hammer, bullish engulfing, Doji, and shooting star.
+- Context and confirmation.
+
+**Module 11: Trends, Support and Resistance**
+- Uptrends, downtrends, and range-bound markets.
+- Support and resistance zones.
+- Double tops, double bottoms, head and shoulders, inverse head and shoulders, triangles, flags, and pennants.
+
+**Module 12: Technical Indicators**
+- SMA, EMA, RSI, MACD, Bollinger Bands, VWAP, and ATR.
+- Include volume, OBV, stochastic oscillators, Fibonacci retracements, pivot points, ADX, and Ichimoku as additional learning topics.
+
+**Module 13: Price Action and Market Structure**
+- Break of Structure (BOS).
+- Change of Character (CHoCH).
+- Liquidity concepts.
+- Order blocks.
+- Fair Value Gaps (FVG).
+- Volume confirmation.
+
+Explain that some advanced price-action interpretations vary between trading methodologies and are not independently proven signals.
+
+**Module 14: Volume, Open Interest and Market Participation**
+- Volume versus open interest.
+- Price and OI combinations.
+- PCR based on OI versus volume.
+- Market breadth and advance-decline data.
+- Explain the limitations of conventional buildup interpretations.
+
+### Level 3 — Advanced: Modules 15–16
+
+**Module 15: Futures and Options**
+- Futures contracts, lot size, expiry, margin, and mark-to-market.
+- Calls and puts.
+- Strike price, spot price, premium, intrinsic value, and time value.
+- ITM, ATM, and OTM.
+- Implied volatility and volatility skew.
+- Delta, Gamma, Theta, Vega, and Rho.
+- Exercise, assignment, liquidity, spread, and expiry risks.
+
+**Module 16: Trading Systems and Advanced Analysis**
+- Market regime analysis.
+- Multi-timeframe analysis.
+- Rule-based strategy design.
+- Position sizing.
+- Backtesting and forward testing.
+- Expectancy, drawdown, and performance review.
+- Portfolio risk and correlated exposure.
+- Advanced quantitative and algorithmic research as optional extensions.
+
+### Learning experience requirements
+
+Every module should include:
+
+1. Learning objectives.
+2. Short lessons divided into understandable sections.
+3. Beginner-friendly explanations with practical Indian-market examples.
+4. Visual explanations where they genuinely improve understanding.
+5. Interactive exercises.
+6. A knowledge-check quiz with explanations for correct and incorrect answers.
+7. A practical activity or market-analysis task.
+8. Module completion tracking.
+9. Links to related games, chart tools, or paper-trading exercises.
+10. A final assessment before marking the module complete, where appropriate.
+
+Do not unlock advanced content solely because the student has spent time on a page. Use a consistent completion policy based on the module's lessons, exercises, and assessment.
+
+### Preserve the reference's formulas
+
+For example:
+
+P/E = Market price per share / EPS
+
+ROE = Profit attributable to shareholders / Average shareholders' equity × 100
+
+Free cash flow = Operating cash flow − Capital expenditure
+
+Position size = Maximum planned loss / (Entry price − Stop price)
+
+For a long position, validate that entry exceeds stop price before applying the formula.
+
+Include the DCF and dividend discount formulas from the reference, explain their assumptions, and provide numerical examples.
+
+Preserve the reference's 12-week study schedule as an optional study plan, not as a mandatory time lock.
+
+Include the reference's company-analysis worksheet, quiz topics, glossary, and reliable learning resources.
+
+Where the source is silent, add supplementary material only when needed to make a lesson functional, and clearly distinguish supplementary content from the reference's core material.
+
+---
+
+## 5. REMOVE USELESS VISUALIZER UI AND ADD PURPOSEFUL VISUAL LEARNING
+
+The current visualizer option does not appear useful enough.
+
+Inspect its implementation and determine whether it duplicates other tools or lacks meaningful interactions.
+
+Remove redundant visualizer controls if they have no clear educational purpose. Do not remove useful visual features.
+
+Instead, add contextual interactive visualizations directly inside relevant lessons.
+
+Examples:
+
+- Candlestick anatomy: hover over open, high, low, close, and wicks.
+- Bullish and bearish candle comparison.
+- Support/resistance drawing practice.
+- Moving-average and RSI visual demonstrations.
+- Balance-sheet equation visualization.
+- P/E and ROE calculators.
+- Options payoff diagrams.
+- Delta, Gamma, Theta, and Vega explanations.
+- Position-sizing and reward/risk calculators.
+
+Visualizations must be connected to the lesson being taught and should explain what the student is seeing.
+
+Do not build a separate visualizer full of unrelated charts.
+
+---
+
+## 6. FIX THE PLAY SECTION — STOCK-MARKET GAMES ONLY
+
+The Play section currently includes unrelated games. Replace or redesign the visible game catalogue so that every game teaches an identifiable Indian stock-market concept.
+
+Reuse existing components wherever possible, including the existing price-prediction, portfolio, candlestick, chart-detective, market-crash, and TraderFi-related games after inspecting their actual implementations.
+
+Create the following interactive games if suitable equivalents do not already exist:
+
+### Game A: Candlestick Detective
+- Display actual or clearly labelled historical candlestick examples.
+- Ask the student to identify a pattern.
+- Explain the candle structure, context, and limitations after the answer.
+- Include hammer, Doji, engulfing, and shooting star.
+
+### Game B: Bull vs Bear Market
+- Show a sequence of historical or clearly labelled simulated price movements.
+- Ask the student to identify the trend, support, resistance, and possible breakout.
+- Explain why the interpretation may be wrong.
+
+### Game C: Trade Decision Simulator
+- Present a market scenario with price, volume, a chart, and a fixed set of rules.
+- Let the student select entry, stop-loss, target, or no-trade.
+- Calculate hypothetical profit/loss and risk/reward.
+- Explain the decision without claiming that it predicts the real market.
+
+### Game D: Portfolio Builder
+- Give the player a virtual capital budget.
+- Let them allocate money across a selection of stocks or sectors.
+- Show diversification, concentration, unrealized P/L, and portfolio exposure.
+- Use appropriate live or clearly labelled historical/simulated data.
+
+### Game E: Risk Manager Challenge
+- Ask students to calculate position size, maximum planned loss, and risk/reward.
+- Penalize oversizing and ignoring risk limits in the educational scoring system.
+
+### Game F: Option Chain Explorer
+- Let students explore calls and puts, strike prices, premiums, open interest, implied volatility, and Greeks.
+- Use real API data only when available.
+- Provide a labelled simulation mode if live data is unavailable.
+
+### Game G: Market Crash Survival
+- Give students a virtual portfolio and simulate adverse price movements.
+- Teach drawdown, diversification, stop-loss limitations, and position sizing.
+
+### Game H: Fundamental Analysis Challenge
+- Present a company's financial statements and ratios.
+- Ask students to compare profitability, debt, valuation, and cash flow.
+- Explain why a single ratio cannot determine whether a stock is attractive.
+
+### Game requirements
+
+- Use actual educational gameplay, not static cards pretending to be games.
+- Include clear instructions, scoring, feedback, retry, and completion states.
+- Save game scores and progress against the authenticated student account where supported.
+- Provide different difficulty levels.
+- Connect each game to the corresponding course module.
+- Clearly label historical data, live data, and simulation data.
+- Do not imply that game scores predict trading success.
+
+---
+
+## 7. TRADE SECTION — FIX STOCK-SPECIFIC CHARTS
+
+The Trade section currently displays the same chart regardless of the selected stock.
+
+Investigate the complete chart data flow, including symbol selection, component props, query keys, backend routes, caching, and state management.
+
+Correct the underlying issue rather than applying a visual workaround.
+
+Requirements:
+
+- Each instrument must have its own correctly mapped price and historical series.
+- Selecting another stock must update the chart, price, OHLC, volume, symbol label, and relevant metrics.
+- Changing symbols must not reuse the previous symbol's cached response.
+- Ensure asynchronous requests cannot overwrite a newer selection with an older response.
+- Show a loading state while fetching new data.
+- Show a clear error or unavailable-data state when the API fails.
+- Never generate a different-looking random chart as a substitute for actual market data.
+
+### Chart features
+
+Provide:
+
+- Line chart.
+- Area chart.
+- Candlestick chart.
+- Volume bars where historical volume data is available.
+- Selectable timeframes supported by the underlying data source.
+- Crosshair or hover details.
+- Open, high, low, close, last price, price change, and percentage change.
+- Appropriate date/time labels.
+- A clear data-source and last-updated indicator.
+
+The line and area charts must render correctly. Fix responsive sizing, chart-container dimensions, missing data handling, invalid numeric values, and chart-library configuration.
+
+### Instrument selection
+
+Support the available NSE stocks and relevant indices through a consistent instrument registry.
+
+Start with the existing supported stock list and expand it in a maintainable way.
+
+Do not claim to provide full historical intraday candles if the selected API only returns a current OHLC snapshot.
+
+---
+
+## 8. GROWW API — REAL MARKET DATA INTEGRATION
+
+I want to use the Groww API endpoints supplied below for market quotes and option-chain data.
+
+Use the official API where my account and subscription provide access. Do not scrape websites as a substitute for an available authorized API.
+
+### Authentication
+
+The Groww requests use:
+
+- Authorization: Bearer ACCESS_TOKEN
+- Accept: application/json
+- X-API-VERSION: 1.0
+
+Store the token in a server-side environment variable, for example:
+
+GROWW_ACCESS_TOKEN=your_actual_token
+
+Never put the token in a React component, browser local storage, a public environment variable, client bundle, Git repository, logs, or error response.
+
+Add the variable to `.env.example` as an empty placeholder. Ensure `.env` is excluded from Git.
+
+Reuse the existing Express server for server-side requests. Add typed, validated backend endpoints and connect the frontend to them.
+
+Handle authentication failures, rate limits, timeouts, malformed payloads, missing instruments, market closures, and unavailable data.
+
+Do not bypass authentication, broker permissions, subscription restrictions, or API terms.
+
+### A. Live quote
+
+GET https://api.groww.in/v1/live-data/quote
+
+Parameters:
+
+- exchange=NSE
+- segment=CASH for cash stocks and eligible index contracts.
+- trading_symbol=NIFTY or the actual supported instrument symbol.
+
+Example request:
+
+GET /v1/live-data/quote?exchange=NSE&segment=CASH&trading_symbol=NIFTY
+
+Use the correct exchange, segment, and trading symbol for each instrument. Do not assume every symbol works with the same parameters.
+
+Display supported response fields where present:
+
+- last_price
+- day_change
+- day_change_perc
+- ohlc
+- average_price
+- volume
+- last_trade_quantity
+- last_trade_time
+- bid_price and bid_quantity
+- offer_price and offer_quantity
+- total_buy_quantity and total_sell_quantity
+- upper_circuit_limit and lower_circuit_limit
+- high_trade_range and low_trade_range
+- week_52_high and week_52_low
+- open_interest and relevant OI changes
+- implied_volatility where applicable
+- market depth when returned
+
+Do not show irrelevant or unavailable fields as zero. Distinguish missing data from a genuine zero.
+
+### B. Live LTP
+
+GET https://api.groww.in/v1/live-data/ltp
+
+Example:
+
+GET /v1/live-data/ltp?segment=CASH&exchange_symbols=NSE_RELIANCE,BSE_SENSEX
+
+Use this endpoint for latest prices and batch requests for supported instruments when appropriate.
+
+Validate the exchange-symbol format and enforce the documented maximum of 50 instruments per request.
+
+### C. Live OHLC snapshot
+
+GET https://api.groww.in/v1/live-data/ohlc
+
+Example:
+
+GET /v1/live-data/ohlc?segment=CASH&exchange_symbols=NSE_RELIANCE,BSE_SENSEX
+
+Use this for current OHLC snapshots.
+
+IMPORTANT: This endpoint's current OHLC snapshot is not a replacement for interval-based historical candles. For line, area, and candlestick history, inspect the existing data sources and use an authorized historical-data endpoint if available.
+
+Do not fabricate historical candles by repeatedly sampling current OHLC and presenting them as genuine historical candles.
+
+### D. Option chain
+
+GET https://api.groww.in/v1/option-chain/exchange/{exchange}/underlying/{underlying}?expiry_date={expiry_date}
+
+Example underlying: NIFTY
+
+Use the selected exchange, underlying instrument, and a valid expiry date supported by the API.
+
+Display available response data:
+
+- Underlying LTP.
+- Strike price.
+- Call (CE) LTP.
+- Put (PE) LTP.
+- Call and put open interest.
+- Call and put volume.
+- Implied volatility.
+- Delta, Gamma, Theta, Vega, and Rho, when returned.
+- Trading symbols.
+- Expiry selector.
+
+Build a proper two-sided option-chain table with strikes in the middle, calls on one side, and puts on the other.
+
+Include sorting, strike filtering, a near-the-money view, loading indicators, and clear unavailable-expiry states.
+
+Do not invent expiry dates, contracts, strikes, Greeks, or premiums.
+
+The option chain must refresh when the selected underlying or expiry changes.
+
+### E. Greeks endpoint
+
+GET https://api.groww.in/v1/live-data/greeks/exchange/{exchange}/underlying/{underlying}/trading_symbol/{trading_symbol}/expiry/{expiry}
+
+Use this for supported option contracts when appropriate.
+
+Explain Greeks in the Learn section and expose them contextually in the option-chain details.
+
+### F. Backend architecture
+
+Inspect existing `server.ts`, `server/marketFeed.ts`, and `server/marketService.ts` before implementing.
+
+Create or adapt a centralized market-data service with:
+
+- A validated instrument registry.
+- A typed Groww API client.
+- Server-side authentication.
+- Appropriate timeouts and rate limiting.
+- Short-lived caching where appropriate.
+- Per-symbol cache keys.
+- Safe fallback behavior.
+- Clear source and timestamp metadata.
+- Consistent error handling.
+
+Create frontend API functions for quote, LTP, OHLC, historical chart data, and option chain as required.
+
+Avoid duplicating Groww request logic in multiple components.
+
+Keep the current market feed available as a clearly identified fallback only when it is appropriate and permitted. If Groww is unavailable, never label fallback or cached data as live Groww data.
+
+Do not use scraping to bypass an API's authentication, access limits, or terms. If an additional public data source is considered, inspect its authorization, permitted usage, latency, and licensing first.
+
+### G. Market data status
+
+Every market-dependent component must distinguish:
+
+- Live data.
+- Cached data.
+- Delayed data.
+- Historical data.
+- Simulated data.
+- Unavailable data.
+
+Display the source and last successful update time.
+
+When the market is closed, show the last available quote with its timestamp rather than suggesting that it is changing in real time.
+
+Do not claim a refresh interval or latency guarantee that has not been verified.
+
+---
+
+## 9. INDEX PAPER TRADING WITH OPTIONS
+
+Extend the existing paper-trading system to support index options, particularly NIFTY and other supported indices.
+
+Keep the feature strictly simulated: no real orders, no broker execution, and no actual-money transactions.
+
+### Interface
+
+Add a clear mode selector:
+
+- Equity Paper Trading.
+- Index Paper Trading.
+- Options Paper Trading.
+
+In Options Paper Trading:
+
+1. Select an eligible underlying index.
+2. Select a valid expiry.
+3. Load the actual option chain from the Groww backend.
+4. Choose CE or PE and a strike.
+5. Display the contract details and premium.
+6. Choose Buy or Sell.
+7. Enter quantity using valid contract lot-size rules obtained from a reliable supported instrument source.
+8. Show estimated required funds or margin according to the simulation's defined assumptions.
+9. Confirm the simulated order.
+10. Track open positions, average premium, realized P/L, unrealized P/L, and order history.
+
+### Risk and accounting rules
+
+- Never assume that the underlying index price is the option premium.
+- Never treat an index as a directly purchasable share.
+- Distinguish option premium from total contract value and required margin.
+- Use valid contract specifications and expiry dates.
+- Include transaction-cost assumptions, clearly labelled if estimates.
+- Handle price changes, missing quotes, and expiry transitions.
+- Record the market-data timestamp used to create each simulated order.
+- Keep equity and options positions distinguishable in the portfolio.
+- Prevent invalid quantities and unsupported contracts.
+
+### Option P/L
+
+For a long option, calculate basic unrealized P/L as:
+
+(Current option premium − Average entry premium) × Number of contracts represented by quantity
+
+If the application stores quantity as units rather than lots, use the corresponding contract quantity consistently. Display total lot quantity and multiplier clearly.
+
+For short options, account for the opposite premium movement and explain the potentially substantial loss risk.
+
+Do not claim this simplified calculation includes all fees, taxes, expiry settlement, or margin requirements unless those are explicitly implemented.
+
+### Expiry and Greeks
+
+- Show expiry and days to expiry based on correct date/time rules.
+- Explain how theta, volatility, and underlying movement can affect option value.
+- Show Greeks only when supported data is available.
+- Never estimate missing Greeks and present them as official live values.
+- Include educational warnings about leverage, time decay, liquidity, spreads, and potentially large losses.
+
+### Persistence
+
+Persist simulated option orders and positions to the existing database against the authenticated student account.
+
+Use appropriate database transactions and server-side validation. Do not trust client-supplied balances, prices, lot sizes, P/L, or user IDs without verification.
+
+---
+
+## 10. FIX LOGIN AND RETURNING-USER ACCOUNT PERSISTENCE
+
+The existing issue is that a student can log in, return later, and receive a message saying the account does not exist.
+
+Investigate and fix the actual cause.
+
+Inspect:
+
+- Registration and login endpoints.
+- User lookup and normalization.
+- Database initialization and persistence.
+- Database file paths or connection configuration.
+- `server/db.ts`.
+- Authentication tokens and session restoration.
+- Frontend auth context and storage utilities.
+- Server deployment and environment configuration.
+- Whether application restarts discard data.
+- Whether registration and login use inconsistent fields or hashing.
+
+Requirements:
+
+1. A successfully registered user must remain registered across page refreshes and application restarts, subject to the configured database's persistence guarantees.
+2. Use a persistent database appropriate to the existing architecture and deployment environment.
+3. Normalize email consistently and enforce a unique database constraint.
+4. Store password hashes, never plaintext passwords.
+5. Restore the user's authenticated session securely.
+6. Handle expired or invalid tokens correctly.
+7. Show useful errors without revealing sensitive account information.
+8. Keep student course progress, game scores, portfolios, and paper trades associated with the correct account.
+9. Do not erase or replace existing user data during initialization or migration.
+10. Add or update database migrations safely if required.
+
+Do not solve this by silently auto-registering every failed login or by creating a fresh account each time.
+
+Test the complete workflow: register, log out, refresh, restart the backend if applicable, log in with the same credentials, and verify that the user's progress and portfolio are still present.
+
+---
+
+## 11. VISUAL DESIGN AND RESPONSIVENESS
+
+Keep StockMate's existing visual identity, but improve consistency and usability.
+
+- Maintain a modern financial-learning dashboard.
+- Use clear visual hierarchy and consistent spacing.
+- Use readable typography and accessible contrast.
+- Make charts, tables, games, and learning modules responsive.
+- Ensure navigation remains usable while the AI Mentor is open.
+- Add loading skeletons or spinners where useful.
+- Provide empty states and meaningful error messages.
+- Add accessible labels, keyboard support, and focus states.
+- Avoid excessive animation and oversized popups.
+- Keep financial numbers formatted consistently in INR.
+- Clearly label live versus simulated market information.
+
+Do not redesign every screen unnecessarily. Focus on the specified problems and preserve functional existing screens.
+
+---
+
+## 12. TESTING AND ACCEPTANCE CRITERIA
+
+Do not finish by merely generating code. Verify the actual implementation.
+
+### Home and Learn
+- Home shows course progress, not the full curriculum.
+- Progress persists after refresh and relogin.
+- The Learn page contains all 16 modules and the three levels.
+- Lesson content follows the reference file.
+- Quizzes provide explanations and record completion correctly.
+- Interactive visualizations correspond to the lesson being studied.
+
+### AI Mentor
+- Opens as a compact floating panel.
+- Can be minimized, closed, and reopened.
+- Does not block the navigation or the entire screen.
+- Handles missing API configuration and request errors.
+
+### Play
+- Only relevant stock-market educational games are shown.
+- Every game has functional interactions, feedback, scoring, and completion states.
+- Game results persist where the existing system supports persistence.
+
+### Trade
+- Selecting RELIANCE and then TCS displays different symbol-specific data.
+- Selecting an index loads the correct index data.
+- Line, area, and candlestick charts render correctly.
+- Switching instruments cannot leave stale data on screen.
+- Failed data requests display an honest unavailable-data state.
+
+### Groww integration
+- The API token remains server-side.
+- Quote, LTP, OHLC, and option-chain requests use correct parameters.
+- Errors and rate limits are handled.
+- No mock data is labelled live.
+- Historical candles are obtained from an appropriate historical source.
+
+### Paper options trading
+- A supported index and expiry load the relevant option chain.
+- CE and PE selections identify the correct contract.
+- Valid lot quantities are enforced.
+- Paper orders update positions and P/L correctly.
+- Orders persist across relogin.
+- No real-money order can be submitted.
+
+### Authentication
+- Registration and login work consistently.
+- Existing accounts are not lost after restart.
+- Course progress and portfolio remain associated with the correct student.
+
+### Build quality
+- Run the available test suite and TypeScript checks.
+- Run the production build.
+- Fix errors caused by the modifications.
+- Check for broken imports, missing environment variables, runtime errors, and console warnings.
+- Do not report tests as passed unless they were actually executed successfully.
+
+---
+
+## 13. FINAL DELIVERY REPORT
+
+When finished, provide a concise report containing:
+
+1. What changed in each section.
+2. Which existing files were modified and which new files were created.
+3. Database changes and migration instructions.
+4. Required environment variables.
+5. Groww API configuration and any access prerequisites.
+6. How to start the frontend and backend.
+7. Which tests and builds were actually run.
+8. Any unresolved issues, API limitations, or features that could not be verified.
+9. Any manual steps I must complete.
+
+Implement the work in logical stages, but continue through all stages without waiting for my approval after every small change. If a real API credential or external service is unavailable, implement the integration safely and explain exactly what remains dependent on credentials or access.
+
+**Priority order:** protect existing functionality → fix authentication persistence → redesign Home and AI Mentor → rebuild learning modules → fix market-specific charts → integrate Groww data → implement index options paper trading → add relevant games → test everything.
+
+Start by inspecting the existing project and reference file. Then implement the upgrade directly in the existing StockMate codebase.

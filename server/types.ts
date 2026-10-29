@@ -287,12 +287,65 @@ export interface PersistentTransaction {
   timestamp: string;
 }
 
+export interface PersistentOptionPosition {
+  id: string;
+  contractSymbol: string;
+  underlying: string;
+  exchange: 'NSE' | 'BSE';
+  expiry: string;
+  strike: number;
+  optionType: 'CE' | 'PE';
+  side: 'BUY' | 'SELL';
+  lotSize: number;
+  lots: number;
+  quantity: number; // lots * lotSize
+  averageEntryPremium: number;
+  currentPremium: number;
+  premiumValue: number;
+  marginBlocked: number;
+  unrealizedPnL: number;
+  unrealizedPnLPercent: number;
+  marketDataTimestamp: string;
+  dataSource: string;
+  updatedAt: string;
+}
+
+export interface PersistentOptionOrder {
+  id: string;
+  userId: string;
+  contractSymbol: string;
+  underlying: string;
+  exchange: 'NSE' | 'BSE';
+  expiry: string;
+  strike: number;
+  optionType: 'CE' | 'PE';
+  action: 'BUY' | 'SELL';
+  isExit?: boolean;
+  lotSize: number;
+  lots: number;
+  quantity: number;
+  premium: number;
+  executionPremium: number;
+  contractTurnover: number;
+  marginRequired: number;
+  estimatedFee: number;
+  realizedPnL?: number;
+  status: 'EXECUTED' | 'REJECTED';
+  marketDataTimestamp: string;
+  dataSource: string;
+  timestamp: string;
+  rationale?: string;
+}
+
 export interface StudentPortfolioState {
   userId: string;
   virtualCash: number;
+  marginBlocked?: number;
   realizedPnL: number;
   positions: PersistentPosition[];
   orders: PersistentOrder[];
+  optionPositions?: PersistentOptionPosition[];
+  optionOrders?: PersistentOptionOrder[];
   transactions: PersistentTransaction[];
   watchlist: string[];
   journal: {
@@ -312,11 +365,64 @@ export interface StudentPortfolioState {
   lastUpdated: string;
 }
 
+export interface CompanyWorksheetDraft {
+  companyName: string;
+  ticker: string;
+  businessModel: string;
+  revenueGrowth5Y: string;
+  profitabilityRoeRoce: string;
+  balanceSheetDebt: string;
+  cashFlowOcfVsPat: string;
+  governancePromoter: string;
+  competitiveMoat: string;
+  valuationVsPeers: string;
+  keyRisksInvalidation: string;
+  updatedAt: string;
+  // Optional legacy keys for backward compatibility
+  company?: string;
+  objective?: 'Long-term investing' | 'Swing trading' | 'Intraday trading';
+  fiveYearTrend?: string;
+  debtCashFlow?: string;
+  valuationPeers?: string;
+  technicalStructure?: string;
+  majorRisks?: string;
+}
+
 export interface StudentCourseProgressState {
   userId: string;
   completedLessons: string[];
+  completedModules?: string[];
+  completedExercises?: string[];
+  moduleQuizScores?: Record<string, number>;
   lessonScores: Record<string, number>;
   awardedXpLessons: string[];
+  lastActiveModuleId?: string;
+  lastActiveLessonId?: string;
+  streakDays?: number;
+  lastStudyDate?: string;
+  worksheetDraft?: CompanyWorksheetDraft;
+  lastUpdated: string;
+}
+
+export interface StudentGameScoreEntry {
+  gameId: string;
+  gameTitle: string;
+  moduleId: string;
+  bestScore: number;
+  lastScore: number;
+  maxPossibleScore: number;
+  accuracyPercent: number;
+  attempts: number;
+  completedDifficulties: ('Beginner' | 'Intermediate' | 'Advanced')[];
+  lastDifficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+  completed: boolean;
+  lastPlayedAt: string;
+}
+
+export interface StudentGameScoresState {
+  userId: string;
+  games: Record<string, StudentGameScoreEntry>;
+  totalGamesCompleted: number;
   lastUpdated: string;
 }
 

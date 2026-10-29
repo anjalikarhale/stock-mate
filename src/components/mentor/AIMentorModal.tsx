@@ -2,13 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Bot,
   X,
+  Minus,
   Send,
   Sparkles,
-  HelpCircle,
-  BrainCircuit,
+  RotateCcw,
+  AlertCircle,
   MessageSquare,
-  ShieldCheck,
-  RotateCcw
 } from 'lucide-react';
 import { useGame } from '../../context/GameContext';
 import { soundEffects } from '../../utils/audio';
@@ -18,54 +17,61 @@ interface ChatMessage {
   role: 'user' | 'model';
   text: string;
   timestamp: string;
+  isFallback?: boolean;
 }
 
 export const AIMentorModal: React.FC = () => {
-  const { isAIMentorOpen, setAIMentorOpen, profile, aiMentorInitialPrompt, clearAIMentorInitialPrompt } = useGame();
+  const {
+    isAIMentorOpen,
+    setAIMentorOpen,
+    isAIMentorMinimized,
+    setAIMentorMinimized,
+    profile,
+    mentorContext,
+    aiMentorInitialPrompt,
+    clearAIMentorInitialPrompt,
+  } = useGame();
 
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
     {
       id: 'init-1',
       role: 'model',
-      text: `Greetings, **${profile.username}**! I am **Arya**, your Socratic Market Mentor.
-
-I am here to guide your journey from **Level 1 Market Newbie** to **Level 11 Market Master**. I will challenge your assumptions and help you reason like a disciplined market practitioner.
-
-What market concept, trade setup, or risk dilemma would you like to investigate together?`,
+      text: `Namaste! I am Arya, your Indian Stock Market Socratic Mentor.\n\nAsk me about any of the 16 curriculum modules (NSE/BSE plumbing, P/E vs ROCE, DCF/DDM, candlesticks, Price + OI, Option Greeks, or position sizing). I never give stock tips—we reason from rules and risk!`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    }
+    },
   ]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (isAIMentorOpen) {
+    if (isAIMentorOpen && !isAIMentorMinimized) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, isAIMentorOpen]);
+  }, [messages, isAIMentorOpen, isAIMentorMinimized]);
 
-  // If opened with a specific prompt (e.g. from chart analysis or mistake breakdown), auto-send
   useEffect(() => {
     if (isAIMentorOpen && aiMentorInitialPrompt) {
       const prompt = aiMentorInitialPrompt;
       clearAIMentorInitialPrompt();
+      setAIMentorMinimized(false);
       handleSendMessage(prompt);
     }
   }, [isAIMentorOpen, aiMentorInitialPrompt]);
 
-  if (!isAIMentorOpen) return null;
-
   const quickPrompts = [
-    'Why is a 1:2 Risk-to-Reward ratio critical?',
-    'What does a Hammer candle with a long lower shadow indicate?',
-    'How does inflation destroy uninvested idle cash?',
-    'How do I overcome FOMO when a stock shoots up 10%?'
+    mentorContext.activeModuleTitle
+      ? `Quiz me on ${mentorContext.activeModuleTitle}`
+      : 'Explain T+1 settlement & CDSL/NSDL',
+    'How do I calculate Position Size = Max Loss / (Entry - Stop)?',
+    'Why did 93% of retail F&O traders lose money in SEBI’s study?',
+    'Difference between ROE and ROCE with debt?',
   ];
 
   const handleSendMessage = async (customText?: string) => {
-    const textToSend = customText || inputMessage.trim();
+    const textToSend = (customText || inputMessage).trim();
     if (!textToSend || loading) return;
 
     soundEffects.click();
@@ -76,9 +82,10 @@ What market concept, trade setup, or risk dilemma would you like to investigate 
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages(prev => [...prev, userMsg]);
-    setInputMessage('');
+    setMessages((prev) => [...prev, userMsg]);
+    if (!customText) setInputMessage('');
     setLoading(true);
+    setStatusNotice(null);
 
     try {
       const response = await fetch('/api/ai/mentor', {
@@ -89,138 +96,240 @@ What market concept, trade setup, or risk dilemma would you like to investigate 
           context: {
             level: profile.level,
             cash: profile.virtualCash,
+            completedModulesCount: (profile.completedModules || []).length,
+            activeTab: mentorContext.currentTab,
+            activeModuleTitle: mentorContext.activeModuleTitle,
+            activeLessonTitle: mentorContext.activeLessonTitle,
+            selectedSymbol: mentorContext.selectedSymbol,
+            tradingMode: mentorContext.tradingMode,
             mistakes: profile.mistakes,
           },
-          chatHistory: messages.map(m => ({ role: m.role, text: m.text })),
+          chatHistory: messages.slice(-8).map((m) => ({ role: m.role, text: m.text })),
         }),
       });
 
       const data = await response.json();
-      const aiReply = data.reply || "Let's examine the underlying supply and demand dynamics together.";
+      if (data.notice) {
+        setStatusNotice(data.notice);
+      }
 
       const modelMsg: ChatMessage = {
         id: `model-${Date.now()}`,
         role: 'model',
-        text: aiReply,
+        text:
+          data.reply ||
+          'Let us examine the risk, invalidation level, and underlying cash flows step by step.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isFallback: Boolean(data.aiConfigured === false || data.fallback),
       };
 
-      setMessages(prev => [...prev, modelMsg]);
-      soundEffects.correct();
-    } catch (err) {
-      const fallbackMsg: ChatMessage = {
-        id: `err-${Date.now()}`,
-        role: 'model',
-        text: `### 📈 Socratic Wisdom
-Remember the golden rule of trading: *Never risk more than 2% of your virtual ₹1,00,000 on a single idea.* What is your stop loss plan before you execute?`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages(prev => [...prev, fallbackMsg]);
+      setMessages((prev) => [...prev, modelMsg]);
+    } catch {
+      setStatusNotice('Mentor service unreachable right now—showing offline curriculum guidance.');
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `err-${Date.now()}`,
+          role: 'model',
+          text: 'Offline Study Tip: Before placing any paper trade, check (1) Market structure & S/R zone, (2) Hard invalidation Stop-Loss, and (3) Position Size = Max ₹ Risk ÷ (Entry − Stop).',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isFallback: true,
+        },
+      ]);
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-2xl bg-slate-900 rounded-3xl border border-slate-800 shadow-2xl flex flex-col h-[600px] overflow-hidden">
-        {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-teal-500 p-0.5 flex items-center justify-center shadow-lg shadow-indigo-950/40">
-              <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-                <Bot className="w-5 h-5 text-indigo-400" />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-white text-base">Arya — Socratic Market Mentor</h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  Gemini AI
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">Guiding reasoning & discipline • No stock tips</p>
-            </div>
-          </div>
+  const handleClearHistory = () => {
+    setMessages([
+      {
+        id: `reset-${Date.now()}`,
+        role: 'model',
+        text: 'Chat cleared! Which Indian market module, chart setup, or valuation formula should we explore next?',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+    setStatusNotice(null);
+  };
 
-          <button
-            onClick={() => setAIMentorOpen(false)}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+  // 1. CLOSED STATE: Compact Floating Bottom-Right Launcher Button
+  if (!isAIMentorOpen) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          soundEffects.click();
+          setAIMentorMinimized(false);
+          setAIMentorOpen(true);
+        }}
+        aria-label="Open Arya Market Mentor"
+        className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-40 inline-flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs sm:text-sm shadow-xl shadow-indigo-950/60 border border-indigo-400/40 transition-transform hover:scale-[1.02] cursor-pointer"
+      >
+        <Bot className="w-4 h-4 sm:w-5 sm:h-5" />
+        <span>Ask Arya</span>
+      </button>
+    );
+  }
 
-        {/* Message Stream */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 scrollbar-thin">
-          {messages.map(msg => (
-            <div
-              key={msg.id}
-              className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-            >
-              <div
-                className={`max-w-[85%] rounded-2xl p-4 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap ${
-                  msg.role === 'user'
-                    ? 'bg-indigo-600 text-white rounded-br-none shadow-md shadow-indigo-950/30 font-medium'
-                    : 'bg-slate-950 text-slate-200 border border-slate-800 rounded-bl-none shadow-inner'
-                }`}
-              >
-                {msg.text}
-              </div>
-              <span className="text-[10px] text-slate-400 mt-1 font-mono px-1">
-                {msg.timestamp}
-              </span>
-            </div>
-          ))}
-
-          {loading && (
-            <div className="flex items-center gap-2 text-indigo-400 text-xs font-semibold p-3 bg-slate-950/60 rounded-2xl border border-slate-800 w-fit animate-pulse">
-              <Sparkles className="w-4 h-4" />
-              <span>Arya is formulating a Socratic inquiry...</span>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Quick Prompts Bar */}
-        <div className="px-4 py-2 bg-slate-950/90 border-t border-slate-800 overflow-x-auto flex gap-2 scrollbar-none">
-          {quickPrompts.map((prompt, idx) => (
-            <button
-              key={idx}
-              disabled={loading}
-              onClick={() => handleSendMessage(prompt)}
-              className="text-[11px] whitespace-nowrap px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-indigo-950/60 text-slate-300 hover:text-indigo-300 border border-slate-800 hover:border-indigo-500/40 transition-colors font-medium"
-            >
-              {prompt}
-            </button>
-          ))}
-        </div>
-
-        {/* Input Bar */}
-        <form
-          onSubmit={e => {
-            e.preventDefault();
-            handleSendMessage();
-          }}
-          className="p-3 sm:p-4 bg-slate-950 border-t border-slate-800 flex items-center gap-2"
+  // 2. MINIMIZED DOCK BAR STATE (Non-blocking)
+  if (isAIMentorMinimized) {
+    return (
+      <div className="fixed bottom-20 md:bottom-6 right-4 sm:right-6 z-40 w-72 rounded-2xl bg-slate-900 border border-indigo-500/40 shadow-2xl px-4 py-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setAIMentorMinimized(false)}
+          className="flex items-center gap-2 text-left flex-1 cursor-pointer"
         >
-          <input
-            type="text"
-            placeholder="Ask Arya about price action, risk rules, or financial ratios..."
-            value={inputMessage}
-            onChange={e => setInputMessage(e.target.value)}
-            disabled={loading}
-            className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-400"
-          />
-          <button
-            type="submit"
-            disabled={!inputMessage.trim() || loading}
-            className="p-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-md disabled:opacity-50 transition-transform active:scale-95"
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
+          <MessageSquare className="w-4 h-4 text-indigo-400 shrink-0" />
+          <div className="truncate">
+            <div className="text-xs font-bold text-white truncate">Arya — Market Mentor</div>
+            <div className="text-[10px] text-slate-400">Click to expand chat</div>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setAIMentorOpen(false)}
+          aria-label="Close Mentor"
+          className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
-    </div>
+    );
+  }
+
+  // 3. OPEN NON-BLOCKING COMPACT PANEL (~380px wide on desktop, constrained height)
+  return (
+    <aside
+      aria-label="Arya Market Mentor Chat"
+      className="fixed bottom-20 md:bottom-6 right-3 sm:right-6 z-40 w-[calc(100vw-1.5rem)] sm:w-[390px] max-h-[min(560px,calc(100vh-7rem))] bg-slate-900/98 border border-slate-700/90 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+    >
+      {/* Compact Header */}
+      <div className="px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center shrink-0">
+            <Bot className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-xs sm:text-sm font-black text-white truncate">
+              Arya — Socratic Mentor
+            </h3>
+            <p className="text-[10px] text-slate-400 truncate">
+              {mentorContext.currentTab === 'TRADE' && mentorContext.selectedSymbol
+                ? `Context: ${mentorContext.selectedSymbol} (${mentorContext.tradingMode || 'EQUITY'})`
+                : mentorContext.activeModuleTitle || '16-Module NSE/BSE Tutor • No Tips'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={handleClearHistory}
+            title="Reset conversation"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setAIMentorMinimized(true)}
+            title="Minimize panel"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+          >
+            <Minus className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setAIMentorOpen(false)}
+            title="Close panel"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Missing API Key / Fallback Notice */}
+      {statusNotice && (
+        <div className="px-3.5 py-2 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-2 text-[11px] text-amber-200 shrink-0">
+          <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="truncate">{statusNotice}</span>
+        </div>
+      )}
+
+      {/* Scrollable Message History */}
+      <div className="flex-1 overflow-y-auto p-3.5 space-y-3 min-h-[220px]">
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+          >
+            <div
+              className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed whitespace-pre-wrap ${
+                msg.role === 'user'
+                  ? 'bg-indigo-600 text-white rounded-br-sm font-medium'
+                  : 'bg-slate-950 text-slate-200 border border-slate-800 rounded-bl-sm'
+              }`}
+            >
+              {msg.text}
+            </div>
+            <span className="text-[10px] text-slate-500 mt-0.5 font-mono px-1">
+              {msg.timestamp}
+            </span>
+          </div>
+        ))}
+
+        {loading && (
+          <div className="inline-flex items-center gap-2 text-indigo-300 text-xs px-3 py-2 bg-slate-950 rounded-xl border border-slate-800">
+            <Sparkles className="w-3.5 h-3.5 animate-spin" />
+            <span>Thinking through market concepts...</span>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Quick Prompt Chips */}
+      <div className="px-3 py-2 bg-slate-950/90 border-t border-slate-800 overflow-x-auto flex gap-1.5 shrink-0">
+        {quickPrompts.map((prompt, idx) => (
+          <button
+            key={idx}
+            type="button"
+            disabled={loading}
+            onClick={() => handleSendMessage(prompt)}
+            className="text-[10px] whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-indigo-950/70 text-slate-300 hover:text-indigo-200 border border-slate-800 cursor-pointer"
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
+
+      {/* Input Form */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSendMessage();
+        }}
+        className="p-2.5 bg-slate-950 border-t border-slate-800 flex items-center gap-2 shrink-0"
+      >
+        <input
+          type="text"
+          placeholder="Ask about modules, ratios, charts, options..."
+          value={inputMessage}
+          onChange={(e) => setInputMessage(e.target.value)}
+          disabled={loading}
+          className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-500"
+        />
+        <button
+          type="submit"
+          disabled={!inputMessage.trim() || loading}
+          aria-label="Send message"
+          className="p-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white cursor-pointer"
+        >
+          <Send className="w-3.5 h-3.5" />
+        </button>
+      </form>
+    </aside>
   );
 };

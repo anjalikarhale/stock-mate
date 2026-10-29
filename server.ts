@@ -4,7 +4,7 @@ import path from "path";
 import { Server as SocketIOServer } from "socket.io";
 import dotenv from "dotenv";
 import rateLimit from "express-rate-limit";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import {
   initDatabase,
   getUserById,
@@ -42,14 +42,31 @@ import {
   getStudentProfile,
   getStudentPortfolio,
   executeOrderOnPortfolio,
+  executeOptionOrderOnPortfolio,
   cancelStudentOrder,
   updateStudentWatchlist,
   getStudentCourseProgress,
   saveStudentCourseProgress,
+  resetStudentCourseProgress,
+  getStudentGameScores,
+  saveStudentGameScore,
   authenticateAdmin,
   getAllUsersProgress,
 } from "./server/db.ts";
-import { SUPPORTED_STOCKS, getStockInfo } from "./server/marketService.ts";
+import { getAllSupportedStocksWithCache, getStockInfo } from "./server/marketService.ts";
+import { startMarketFeed } from "./server/marketFeed.ts";
+import { getAllRegisteredInstruments, getRegisteredInstrument } from "./server/instrumentRegistry.ts";
+import {
+  getInstrumentQuote,
+  getBatchLtp,
+  getBatchOhlcSnapshot,
+  getHistoricalCandles,
+  getIndexOptionChain,
+  getOptionContractGreeks,
+  isGrowwConfigured,
+  isIndianMarketOpenNow,
+  SupportedTimeframe,
+} from "./server/growwService.ts";
 import { calculateRoundScore, evaluateQuizAnswer } from "./server/scoringEngine.ts";
 import {
   MARKET_CHALLENGE_QUESTIONS,
@@ -77,6 +94,8 @@ const io = new SocketIOServer(server, {
   },
 });
 
+startMarketFeed(io);
+
 app.use(express.json());
 
 // --------------------------------------------------------------------------
@@ -100,21 +119,54 @@ const aiRateLimiter = rateLimit({
   message: { error: "Too many AI requests. Please slow down and try again shortly." },
 });
 
+const marketRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 180,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false, default: false },
+  message: { error: "Market data rate limit exceeded. Please wait a moment." },
+});
+
 app.use("/api/auth", authRateLimiter);
 app.use("/api/ai", aiRateLimiter);
 app.use("/api/chart-mentor", aiRateLimiter);
+app.use("/api/market", marketRateLimiter);
 
-// Lazy-initialized Gemini client helper
+// Lazy-initialized Gemini client helper (server-side ONLY)
 let aiClient: GoogleGenAI | null = null;
 function getAIClient(): GoogleGenAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  if (!apiKey || !apiKey.trim()) {
     return null;
   }
   if (!aiClient) {
-    aiClient = new GoogleGenAI({ apiKey });
+    aiClient = new GoogleGenAI({
+      apiKey: apiKey.trim(),
+      httpOptions: {
+        timeout: 8000,
+        headers: { "User-Agent": "aistudio-build" },
+      },
+    });
   }
   return aiClient;
+}
+
+function withGeminiTimeout<T>(promise: Promise<T>, ms = 8000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Gemini request timed out after ${ms}ms`));
+    }, ms);
+    promise
+      .then((val) => {
+        clearTimeout(timer);
+        resolve(val);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
 }
 
 // --------------------------------------------------------------------------
@@ -240,17 +292,126 @@ app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     app: "StockMate Classroom & RPG",
-    version: "2.0.0",
-    geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+    version: "3.0.0",
+    geminiConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()),
+    growwConfigured: isGrowwConfigured(),
+    marketOpen: isIndianMarketOpenNow(),
     realtime: "Socket.IO Enabled",
   });
 });
 
 // --------------------------------------------------------------------------
-// Market Data API (Real historical NSE data with strict delay labeling)
+// Centralized Market Data API (Groww Live Data + Per-Symbol Historical Candles)
 // --------------------------------------------------------------------------
+app.get("/api/market/status", (_req, res) => {
+  res.json({
+    growwConfigured: isGrowwConfigured(),
+    marketOpen: isIndianMarketOpenNow(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/api/market/instruments", (req, res) => {
+  const kind = req.query.type as "EQUITY" | "INDEX" | "ETF" | undefined;
+  res.json({
+    instruments: getAllRegisteredInstruments(kind),
+    growwConfigured: isGrowwConfigured(),
+    marketOpen: isIndianMarketOpenNow(),
+  });
+});
+
+app.get("/api/market/quote", async (req, res) => {
+  const symbol = String(req.query.symbol || req.query.trading_symbol || "").trim();
+  if (!symbol) {
+    return res.status(400).json({ error: "Query parameter 'symbol' is required." });
+  }
+  const quote = await getInstrumentQuote(symbol);
+  if (!quote) {
+    return res.status(404).json({ error: `Instrument '${symbol}' is not in the supported NSE/BSE registry.` });
+  }
+  return res.json(quote);
+});
+
+app.get("/api/market/ltp", async (req, res) => {
+  const segment = (String(req.query.segment || "CASH").toUpperCase() === "FNO" ? "FNO" : "CASH") as "CASH" | "FNO";
+  const rawSymbols = String(req.query.exchange_symbols || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const result = await getBatchLtp(segment, rawSymbols);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error, meta: result.meta });
+  }
+  return res.json(result);
+});
+
+app.get("/api/market/ohlc", async (req, res) => {
+  const segment = (String(req.query.segment || "CASH").toUpperCase() === "FNO" ? "FNO" : "CASH") as "CASH" | "FNO";
+  const rawSymbols = String(req.query.exchange_symbols || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const result = await getBatchOhlcSnapshot(segment, rawSymbols);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error, meta: result.meta });
+  }
+  return res.json(result);
+});
+
+app.get("/api/market/history/:symbol", async (req, res) => {
+  const symbol = String(req.params.symbol || "").trim();
+  const tfRaw = String(req.query.timeframe || "3M").toUpperCase();
+  const allowedTf: SupportedTimeframe[] = ["5D", "1M", "3M", "6M", "1Y"];
+  const timeframe: SupportedTimeframe = allowedTf.includes(tfRaw as SupportedTimeframe)
+    ? (tfRaw as SupportedTimeframe)
+    : "3M";
+
+  const chartData = await getHistoricalCandles(symbol, timeframe);
+  if (chartData.meta.status === "UNAVAILABLE") {
+    return res.status(404).json(chartData);
+  }
+  return res.json(chartData);
+});
+
+app.get("/api/market/option-chain", async (req, res) => {
+  const underlying = String(req.query.underlying || "NIFTY").trim().toUpperCase();
+  const expiryDate = req.query.expiry_date ? String(req.query.expiry_date).trim() : undefined;
+  const allowSim = req.query.allow_simulation !== "false";
+
+  const inst = getRegisteredInstrument(underlying);
+  if (!inst || !inst.supportsOptions) {
+    return res.status(400).json({
+      error: `Underlying '${underlying}' does not support index options in this registry. Supported: NIFTY, BANKNIFTY, SENSEX.`,
+    });
+  }
+
+  const chain = await getIndexOptionChain(inst.symbol, expiryDate, allowSim);
+  if (!chain) {
+    return res.status(404).json({ error: `Option chain unavailable for ${underlying}.` });
+  }
+  return res.json(chain);
+});
+
+app.get("/api/market/greeks", async (req, res) => {
+  const exchange = (String(req.query.exchange || "NSE").toUpperCase() === "BSE" ? "BSE" : "NSE") as "NSE" | "BSE";
+  const underlying = String(req.query.underlying || "").trim().toUpperCase();
+  const tradingSymbol = String(req.query.trading_symbol || "").trim();
+  const expiry = String(req.query.expiry || "").trim();
+
+  if (!underlying || !tradingSymbol || !expiry) {
+    return res.status(400).json({ error: "Parameters 'underlying', 'trading_symbol', and 'expiry' are required." });
+  }
+
+  const result = await getOptionContractGreeks({ exchange, underlying, tradingSymbol, expiry });
+  if (!result.success) {
+    return res.status(404).json(result);
+  }
+  return res.json(result);
+});
+
+// Legacy Classroom market endpoints preserved
 app.get("/api/market/stocks", (_req, res) => {
-  res.json(SUPPORTED_STOCKS);
+  res.json(getAllSupportedStocksWithCache());
 });
 
 app.get("/api/market/stocks/:symbol", (req, res) => {
@@ -589,7 +750,7 @@ app.get("/api/student/portfolio", (req, res) => {
   return res.json(portfolio);
 });
 
-app.post("/api/student/orders", (req, res) => {
+app.post("/api/student/orders", async (req, res) => {
   const authUser = getAuthenticatedUser(req);
   if (!authUser) {
     return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
@@ -600,8 +761,7 @@ app.post("/api/student/orders", (req, res) => {
     return res.status(400).json({ error: "symbol, action, and quantity are required" });
   }
 
-  // Derive user identity strictly from token
-  const result = executeOrderOnPortfolio(authUser.id, {
+  const result = await executeOrderOnPortfolio(authUser.id, {
     symbol,
     action,
     type: type || "MARKET",
@@ -619,6 +779,40 @@ app.post("/api/student/orders", (req, res) => {
 
   const updatedPortfolio = getStudentPortfolio(authUser.id);
   return res.status(201).json({ success: true, order: result.order, portfolio: updatedPortfolio });
+});
+
+app.post("/api/student/options/orders", async (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+
+  const { underlying, expiry, strike, optionType, action, lots, rationale } = req.body;
+  if (!underlying || !expiry || strike === undefined || !optionType || !action || !lots) {
+    return res.status(400).json({
+      error: "underlying, expiry, strike, optionType, action, and lots are required.",
+    });
+  }
+
+  const result = await executeOptionOrderOnPortfolio(authUser.id, {
+    underlying: String(underlying),
+    expiry: String(expiry),
+    strike: Number(strike),
+    optionType: optionType === "PE" ? "PE" : "CE",
+    action: action === "SELL" ? "SELL" : "BUY",
+    lots: Number(lots),
+    rationale: rationale ? String(rationale) : undefined,
+  });
+
+  if (!result.success) {
+    return res.status(400).json({ error: result.error });
+  }
+
+  return res.status(201).json({
+    success: true,
+    order: result.order,
+    portfolio: result.portfolio || getStudentPortfolio(authUser.id),
+  });
 });
 
 app.post("/api/student/orders/:orderId/cancel", (req, res) => {
@@ -656,7 +850,7 @@ app.post("/api/student/watchlist", (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// Student NCFM Course Progression API
+// Student 16-Module Course Progression & Game Scores API
 // --------------------------------------------------------------------------
 app.get("/api/student/course-progress", (req, res) => {
   const authUser = getAuthenticatedUser(req);
@@ -673,16 +867,81 @@ app.post("/api/student/course-progress", (req, res) => {
     return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
   }
 
-  const { lessonId, score, earnedXp } = req.body;
-  if (!lessonId) {
-    return res.status(400).json({ error: "lessonId is required" });
+  const {
+    lessonId,
+    score,
+    earnedXp,
+    moduleId,
+    exerciseId,
+    moduleCompleted,
+    moduleQuizScore,
+    lastActiveModuleId,
+    lastActiveLessonId,
+    worksheetDraft,
+  } = req.body;
+
+  if (!lessonId && !moduleId && !exerciseId && !worksheetDraft && !lastActiveModuleId) {
+    return res.status(400).json({ error: "Progress update payload is required" });
   }
+
   const result = saveStudentCourseProgress(
     authUser.id,
-    lessonId,
+    lessonId || "__meta_only__",
     Number(score) || 100,
-    Number(earnedXp) || 100
+    Number(earnedXp) || 0,
+    {
+      moduleId,
+      exerciseId,
+      moduleCompleted: Boolean(moduleCompleted),
+      moduleQuizScore: typeof moduleQuizScore === "number" ? moduleQuizScore : undefined,
+      lastActiveModuleId,
+      lastActiveLessonId,
+      worksheetDraft,
+    }
   );
+  return res.json({ success: true, ...result });
+});
+
+app.post("/api/student/course-progress/reset", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+  const progress = resetStudentCourseProgress(authUser.id);
+  return res.json({ success: true, progress });
+});
+
+app.get("/api/student/game-scores", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+  const scores = getStudentGameScores(authUser.id);
+  return res.json(scores);
+});
+
+app.post("/api/student/game-scores", (req, res) => {
+  const authUser = getAuthenticatedUser(req);
+  if (!authUser) {
+    return res.status(401).json({ error: "Unauthorized: Valid Bearer token required" });
+  }
+  const { gameId, gameTitle, moduleId, score, maxPossibleScore, difficulty, completed, xpReward } = req.body;
+  if (!gameId) {
+    return res.status(400).json({ error: "gameId is required" });
+  }
+  const diff =
+    difficulty === "Advanced" ? "Advanced" : difficulty === "Intermediate" ? "Intermediate" : "Beginner";
+
+  const result = saveStudentGameScore(authUser.id, {
+    gameId: String(gameId),
+    gameTitle: String(gameTitle || gameId),
+    moduleId: String(moduleId || "module-1"),
+    score: Number(score) || 0,
+    maxPossibleScore: Number(maxPossibleScore) || 100,
+    difficulty: diff,
+    completed: Boolean(completed),
+    xpReward: Number(xpReward) || 75,
+  });
   return res.json({ success: true, ...result });
 });
 
@@ -729,19 +988,19 @@ You must adhere strictly to these rules:
   try {
     const ai = getAIClient();
     if (ai) {
-      const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: `${systemInstruction}\n\nCURRENT CHART CONTEXT:\n${chartContextSummary}\n\nSTUDENT QUESTION:\n${question}`,
-              },
-            ],
+      const response = await withGeminiTimeout(
+        ai.models.generateContent({
+          model: "gemini-3.8-flash",
+          contents: `CURRENT CHART CONTEXT:\n${chartContextSummary}\n\nSTUDENT QUESTION:\n${question}`,
+          config: {
+            systemInstruction,
+            temperature: 0.5,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            abortSignal: AbortSignal.timeout(8000),
           },
-        ],
-      });
+        }),
+        8500
+      );
 
       const reply = response.text || "I have analyzed the provided chart context. Let me know if you would like to explore specific candlestick patterns or support levels.";
       return res.json({ success: true, reply, source: "gemini-3.8-flash" });
@@ -1604,118 +1863,145 @@ app.get("/api/activities/:id/export", (req, res) => {
 app.post("/api/ai/mentor", async (req, res) => {
   try {
     const { message, context, chatHistory } = req.body;
-    const ai = getAIClient();
+    const cleanMsg = String(message || "").trim();
+    if (!cleanMsg) {
+      return res.status(400).json({ error: "Please enter a question for the AI Mentor." });
+    }
 
+    const ai = getAIClient();
     if (!ai) {
       return res.json({
-        reply: generateSocraticFallback(message, context),
-        source: "simulated_socratic_engine",
+        reply: generateSocraticFallback(cleanMsg, context),
+        source: "curriculum-tutor-fallback",
+        geminiConfigured: false,
+        notice: "GEMINI_API_KEY is not configured — answering using built-in 16-Module Curriculum Tutor.",
       });
     }
 
-    const systemInstruction = `You are 'Arya', the master Socratic Financial Mentor in MARKET QUEST / StockMate — an educational RPG for the Indian stock market (NSE/BSE).
-Your goal is to teach financial literacy, technical analysis, fundamental analysis, risk management, and trading psychology from zero to mastery.
-CRITICAL RULES:
-1. Socratic Teaching: Ask thought-provoking questions and guide the student to reach their own conclusion. Never just dump answers or dry definitions.
-2. ABSOLUTELY NO STOCK TIPS OR BUY/SELL ADVICE: Never recommend specific real stocks to buy or sell. Always emphasize risk, probabilities, and risk-management principles.
-3. Indian Context: Refer to Indian financial market concepts (NSE, BSE, NIFTY 50, SENSEX, SEBI, Demat, Rupee ₹, etc.) when relevant.
-4. Tone: Encouraging, analytical, disciplined, game-master RPG mentor persona.`;
+    const moduleTitle = context?.activeModuleTitle || context?.moduleTitle;
+    const lessonTitle = context?.activeLessonTitle || context?.lessonTitle;
+    const activeTab = context?.activeTab || context?.currentTab || "Learn";
+    const virtualCashVal = context?.cash ?? context?.virtualCash;
 
-    const contents = [];
+    const contextBlock = context
+      ? `Active Student Context:
+- Screen/Tab: ${activeTab}
+- Current Module: ${moduleTitle || "N/A"} (${context.levelLabel || ""})
+- Current Lesson: ${lessonTitle || "N/A"}
+- Selected Symbol: ${context.selectedSymbol || "N/A"}
+- Trading Mode: ${context.tradingMode || "N/A"}
+- Virtual Cash: ₹${virtualCashVal ?? "N/A"}`
+      : "";
+
+    const systemInstruction = `You are the StockMate Educational AI Mentor for the Indian stock market (NSE, BSE, SEBI, NSDL/CDSL, Nifty 50, Sensex, Nifty Bank).
+Ground your explanations in StockMate's 16-module curriculum:
+- Level 1 Beginner (Modules 1–5): Shares & ownership, market price vs company value, SEBI/NSE/BSE/NSDL/CDSL/clearing, Bank+Trading+Demat accounts, Nifty 50/Sensex/Nifty Bank (indices are benchmarks, not directly purchasable shares), Market/Limit/SL/SL-M orders, bid-ask spread, slippage, Investing vs Trading.
+- Level 2 Intermediate (Modules 6–14): P&L, Balance Sheet (Assets = Liabilities + Equity), Cash Flow Statement (profit vs cash flow), Ratios (EPS, P/E = Price/EPS, P/B, ROE, ROCE, D/E, Current Ratio, Margins, FCF = CFO - CapEx), Valuation (Relative, DCF, DDM P0 = D1/(r-g) for r > g, Bear/Base/Bull scenarios), Macro/RBI/FII-DII, Candlesticks (OHLC, Hammer, Engulfing, Doji, Shooting Star require context), Trends & S/R zones, Indicators (SMA, EMA, RSI, MACD, Bollinger, VWAP, ATR), Price Action (BOS, CHoCH, Order Blocks, FVG — note methodological variations), Volume & OI (Long/Short buildup conventions, PCR OI vs Volume).
+- Level 3 Advanced (Modules 15–16): Futures & Options (Calls/Puts, ITM/ATM/OTM, IV & skew, Delta/Gamma/Theta/Vega/Rho as local sensitivity estimates, SEBI finding that 93% of individual F&O traders incurred losses in FY2022–FY2024), Trading Systems & Risk Management (Position size = Max planned loss / (Entry - Stop) for long trades where Entry > Stop, R:R, expectancy, drawdown, backtesting biases).
+
+STRICT RULES:
+1. Distinguish educational explanations from personalized financial advice. NEVER recommend buying or selling a real security and NEVER guarantee profits.
+2. NEVER invent live market prices. Only refer to prices explicitly provided in the student's context, or use clearly labelled hypothetical ₹ examples.
+3. Keep answers concise (120–220 words), well-structured with short bullet points, INR (₹) formatting, and one Socratic check-for-understanding question at the end.`;
+
+    const contents: any[] = [];
     if (chatHistory && Array.isArray(chatHistory)) {
-      for (const msg of chatHistory.slice(-6)) {
-        contents.push({
-          role: msg.role === "user" ? "user" : "model",
-          parts: [{ text: msg.text }],
-        });
+      for (const msg of chatHistory.slice(-8)) {
+        if (msg && typeof msg.text === "string" && msg.text.trim()) {
+          contents.push({
+            role: msg.role === "user" ? "user" : "model",
+            parts: [{ text: msg.text }],
+          });
+        }
       }
     }
     contents.push({
       role: "user",
-      parts: [{ text: message || "Can you explain the risk-to-reward ratio and why 1:2 is recommended?" }],
+      parts: [{ text: contextBlock ? `${contextBlock}\n\nStudent Question: ${cleanMsg}` : cleanMsg }],
     });
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: contents as any,
-      config: {
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        temperature: 0.7,
-        maxOutputTokens: 600,
-      },
-    });
+    const response = await withGeminiTimeout(
+      ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents,
+        config: {
+          systemInstruction,
+          temperature: 0.5,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          abortSignal: AbortSignal.timeout(8000),
+        },
+      }),
+      8500
+    );
 
-    const replyText = response.text || "Let's examine the mechanics: what happens to your capital when your position size exceeds your risk tolerance?";
-    return res.json({ reply: replyText, source: "gemini-3.8-flash" });
-  } catch (error: any) {
-    console.error("AI Mentor error:", error);
-    return res.json({
-      reply: "Let's analyze this step-by-step. In market analysis, when you look at price action, what is the first signal of buyer vs seller dominance you look for?",
-      source: "fallback",
-    });
-  }
-});
-
-app.post("/api/ai/analyze-trade", async (req, res) => {
-  try {
-    const { trade, portfolio } = req.body;
-    const ai = getAIClient();
-
-    if (!ai) {
+    const replyText = (response.text || "").trim();
+    if (!replyText) {
       return res.json({
-        analysis: generateTradeAnalysisFallback(trade),
-        learningPoints: [
-          "Always define stop loss before entering any position.",
-          "Check risk-to-reward ratio (minimum 1:2 recommended).",
-          "Avoid entering after massive vertical candles to prevent FOMO traps.",
-        ],
+        reply: generateSocraticFallback(cleanMsg, context),
+        source: "curriculum-tutor-fallback",
+        geminiConfigured: true,
+        notice: "Model returned an empty response; showing grounded curriculum explanation.",
       });
     }
 
-    const prompt = `Analyze this simulated trade made by a student:
-Trade Details: ${JSON.stringify(trade)}
-Portfolio State: ${JSON.stringify(portfolio)}
-Provide:
-1. Quick objective assessment of the trade setup and risk management.
-2. Socratic feedback question.
-3. 2 key rules for Indian market trading discipline.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: prompt,
-      config: {
-        temperature: 0.6,
-        maxOutputTokens: 500,
-      },
-    });
-
     return res.json({
-      analysis: response.text || "Good trade execution. Notice how your risk per trade stayed under 2% of total capital.",
+      reply: replyText,
       source: "gemini-3.8-flash",
+      geminiConfigured: true,
     });
   } catch (error: any) {
+    console.error("AI Mentor error:", error?.message || error);
     return res.json({
-      analysis: generateTradeAnalysisFallback(req.body.trade),
-      learningPoints: [
-        "Position sizing is your strongest defense against market volatility.",
-        "Check support and resistance before market entry.",
-      ],
+      reply: generateSocraticFallback(req.body?.message || "", req.body?.context),
+      source: "curriculum-tutor-fallback",
+      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+      notice: "Live AI service temporarily unavailable — using built-in curriculum tutor.",
     });
   }
 });
 
-function generateSocraticFallback(message: string, _context: any): string {
+function generateSocraticFallback(message: string, context: any): string {
   const lower = (message || "").toLowerCase();
-  if (lower.includes("candlestick") || lower.includes("hammer") || lower.includes("doji")) {
-    return `### 🕯️ Reading Price Action
-A candlestick tells the battle between buyers (bulls) and sellers (bears).
+  const modName = context?.activeModuleTitle || context?.moduleTitle;
+  const lessonHint = modName ? `*(Connected to ${modName})*\n\n` : "";
 
-**Let me ask you:**
-If you see a **Hammer** with a long lower shadow (wick) at the bottom of a downtrend, what does that long lower wick tell you about the aggressive push by sellers vs the swift rejection by buyers?`;
+  if (lower.includes("p/e") || lower.includes("pe ") || lower.includes("roe") || lower.includes("ratio")) {
+    return `${lessonHint}**Financial Ratios (Module 7):**
+- **P/E Ratio** = Market Price per Share ÷ EPS. A low P/E is *not* automatically a bargain—earnings may be cyclical or declining.
+- **ROE** = (Profit Attributable to Shareholders ÷ Average Shareholders' Equity) × 100. High ROE can come from strong operations *or* heavy debt leverage.
+- Always compare ratios against sector peers and cash-flow conversion (**FCF = Operating Cash Flow − CapEx**).
+
+*Check:* Why might two companies in different sectors (say IT vs Banking) naturally trade at very different P/E multiples?`;
   }
-  return `### 📈 Socratic Market Wisdom
-Every market price is simply the latest agreement point between buyers and sellers under uncertainty.
-Before placing any trade, calculate your Entry, Stop Loss, and Target to protect your capital.`;
+  if (lower.includes("option") || lower.includes("greek") || lower.includes("theta") || lower.includes("delta") || lower.includes("ce") || lower.includes("pe")) {
+    return `${lessonHint}**Options & Greeks (Module 15):**
+- **Call (CE)** gives the buyer the right to buy; **Put (PE)** gives the buyer the right to sell. Buyers pay a **premium** (Intrinsic Value + Time Value), while sellers face potentially large obligations and require margin.
+- **Greeks** are local sensitivity estimates: **Delta** (underlying move), **Gamma** (change in Delta), **Theta** (time decay), **Vega** (implied volatility), **Rho** (interest rates).
+- *Risk Reminder:* SEBI reported that 93% of individual equity F&O traders incurred net losses in FY2022–FY2024.
+
+*Check:* What happens to an Out-of-the-Money (OTM) option's time value as expiry approaches if the index stays flat?`;
+  }
+  if (lower.includes("position size") || lower.includes("stop") || lower.includes("risk")) {
+    return `${lessonHint}**Position Sizing & Risk Control (Module 16):**
+- **Formula (Long Trade, Entry > Stop):**
+  \`Position Size = Maximum Planned Loss ÷ (Entry Price − Stop Price)\`
+- Example: With ₹1,00,000 capital and 1% risk (₹1,000 max planned loss), buying at ₹500 with a stop at ₹485 risks ₹15/share → \`1000 ÷ 15 = 66 shares\`.
+- Note: Gaps, slippage, and transaction charges can make actual loss exceed planned risk.
+
+*Check:* If your stop-loss distance widens from ₹15 to ₹30, how should your share quantity change to keep rupee risk constant?`;
+  }
+  if (lower.includes("candlestick") || lower.includes("hammer") || lower.includes("doji") || lower.includes("support") || lower.includes("resistance")) {
+    return `${lessonHint}**Candlesticks & Market Structure (Modules 10–11):**
+- A candlestick summarizes **Open, High, Low, Close (OHLC)** for one period.
+- Patterns like a **Hammer**, **Bullish Engulfing**, **Doji**, or **Shooting Star** are *not* standalone guarantees—evaluate them near **Support/Resistance zones** with volume and trend context.
+
+*Check:* Why is a Hammer forming after a prolonged decline near a prior support zone more meaningful than the same candle inside a choppy sideways range?`;
+  }
+  return `${lessonHint}**StockMate Curriculum Guide:**
+- Connect **business quality & cash flows** (Modules 6–9), **price structure & liquidity** (Modules 10–14), and **strict position sizing** (Modules 15–16) before making any simulated paper trade.
+- Ask me about any concept—such as **SEBI/Demat settlement**, **Balance Sheet vs Cash Flow**, **DCF/DDM valuation**, **RSI/VWAP/ATR**, **Option Chain & Greeks**, or **Position Sizing**!
+
+*Educational Note: All explanations are for learning and simulated paper trading, not financial advice.*`;
 }
 
 function generateTradeAnalysisFallback(trade: any): string {

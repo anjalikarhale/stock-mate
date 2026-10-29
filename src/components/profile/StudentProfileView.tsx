@@ -68,7 +68,9 @@ export const StudentProfileView: React.FC = () => {
               </div>
               <div className="bg-slate-950/80 px-3.5 py-1.5 rounded-xl border border-slate-800 flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
-                <span className="text-sm font-black text-amber-300 font-mono">5 Day Streak</span>
+                <span className="text-sm font-black text-amber-300 font-mono">
+                  {Math.max(1, profile.streakDays || 1)} Day Streak
+                </span>
               </div>
             </div>
           </div>
